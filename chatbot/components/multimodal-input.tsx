@@ -188,10 +188,8 @@ function PureMultimodalInput({
     }
   };
 
-  const handleFileChange = useCallback(
-    async (event: ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(event.target.files || []);
-
+  const handleFiles = useCallback(
+    async (files: File[]) => {
       setUploadQueue(files.map((file) => file.name));
 
       try {
@@ -212,6 +210,33 @@ function PureMultimodalInput({
       }
     },
     [setAttachments],
+  );
+
+  const handleFileChange = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(event.target.files || []);
+      await handleFiles(files);
+    },
+    [handleFiles],
+  );
+
+  const handlePaste = useCallback(
+    async (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const items = Array.from(event.clipboardData.items);
+      const files = items
+        .filter((item) => item.kind === 'file')
+        .map((item) => item.getAsFile())
+        .filter((file): file is File => file !== null);
+
+      if (files.length > 0) {
+        event.preventDefault();
+        const fileCount = files.length;
+        const fileText = fileCount === 1 ? 'file' : 'files';
+        toast.success(`Uploading ${fileCount} ${fileText}...`);
+        await handleFiles(files);
+      }
+    },
+    [handleFiles],
   );
 
   const { isAtBottom, scrollToBottom } = useScrollToBottom();
@@ -319,6 +344,7 @@ function PureMultimodalInput({
           placeholder="Send a message..."
           value={input}
           onChange={handleInput}
+          onPaste={handlePaste}
           minHeight={48}
           maxHeight={48}
           disableAutoResize={true}
