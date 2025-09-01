@@ -17,6 +17,7 @@ import { useLocalStorage, useWindowSize } from 'usehooks-ts';
 import { ArrowUpIcon, PaperclipIcon, StopIcon } from './icons';
 import { PreviewAttachment } from './preview-attachment';
 import { Button } from './ui/button';
+import { Loader } from './elements/loader';
 import { SuggestedActions } from './suggested-actions';
 import {
   PromptInput,
@@ -122,9 +123,19 @@ function PureMultimodalInput({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadQueue, setUploadQueue] = useState<Array<string>>([]);
+  const [ocrInProgress, setOcrInProgress] = useState<boolean>(false);
 
   const submitForm = useCallback(() => {
     window.history.replaceState({}, '', `/chat/${chatId}`);
+
+    // Collect OCR text from image attachments
+    const ocrTexts = attachments
+      .filter(attachment => attachment.contentType.startsWith('image/') && attachment.ocrText)
+      .map(attachment => `[图片识别结果] ${attachment.name}: ${attachment.ocrText}`)
+      .join('\n');
+
+    // Combine input text with OCR results
+    const fullText = [input, ocrTexts].filter(Boolean).join('\n\n');
 
     sendMessage({
       role: 'user',
@@ -137,7 +148,7 @@ function PureMultimodalInput({
         })),
         {
           type: 'text',
-          text: input,
+          text: fullText,
         },
       ],
     });
@@ -161,6 +172,64 @@ function PureMultimodalInput({
     chatId,
   ]);
 
+  const performOCR = async (imageUrl: string, attachment: Attachment) => {
+    // Set global OCR loading state
+    setOcrInProgress(true);
+    
+    // Set loading state for specific attachment
+    setAttachments(current => 
+      current.map(a => 
+        a.url === attachment.url 
+          ? { ...a, ocrLoading: true }
+          : a
+      )
+    );
+
+    try {
+      const response = await fetch('/api/ocr', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ imageUrl }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          // Update attachment with OCR result
+          setAttachments(current => 
+            current.map(a => 
+              a.url === attachment.url 
+                ? { ...a, ocrText: data.text, ocrLoading: false }
+                : a
+            )
+          );
+          toast.success('图片文字识别完成');
+        } else {
+          throw new Error(data.error || 'OCR failed');
+        }
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'OCR request failed');
+      }
+    } catch (error) {
+      console.error('OCR error:', error);
+      // Remove loading state on error
+      setAttachments(current => 
+        current.map(a => 
+          a.url === attachment.url 
+            ? { ...a, ocrLoading: false }
+            : a
+        )
+      );
+      toast.error('图片文字识别失败');
+    } finally {
+      // Always clear global OCR loading state
+      setOcrInProgress(false);
+    }
+  };
+
   const uploadFile = async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -175,11 +244,18 @@ function PureMultimodalInput({
         const data = await response.json();
         const { url, pathname, contentType } = data;
 
-        return {
+        const attachment = {
           url,
           name: pathname,
           contentType: contentType,
         };
+
+        // If it's an image, trigger OCR
+        if (contentType.startsWith('image/')) {
+          performOCR(url, attachment);
+        }
+
+        return attachment;
       }
       const { error } = await response.json();
       toast.error(error);
@@ -284,6 +360,24 @@ function PureMultimodalInput({
           />
         )}
 
+      {/* Global OCR Progress Bar */}
+      {ocrInProgress && (
+        <div className="w-full max-w-2xl mx-auto mb-4">
+          <div className="bg-muted rounded-lg p-3 border border-orange-300 dark:border-orange-600">
+            <div className="flex items-center gap-3">
+              <Loader size={20} />
+              <div className="flex-1">
+                <div className="text-sm font-medium text-foreground">图片文字识别中</div>
+                <div className="text-xs text-muted-foreground">正在使用AI识别图片中的文字内容，请稍等片刻...</div>
+              </div>
+            </div>
+            <div className="mt-2 w-full bg-background rounded-full h-1.5">
+              <div className="bg-orange-500 h-1.5 rounded-full animate-pulse" style={{ width: '70%' }}></div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <input
         type="file"
         className="fixed -top-4 -left-4 size-0.5 opacity-0 pointer-events-none"
@@ -294,54 +388,70 @@ function PureMultimodalInput({
       />
 
       <PromptInput
-        className="border border-transparent shadow-lg transition-all duration-200 shadow-black/10 hover:border-primary/20 focus-within:border-primary/30 focus-within:shadow-xl focus-within:shadow-primary/20"
+        className={`border transition-all duration-200 shadow-lg shadow-black/10 ${
+          ocrInProgress 
+            ? 'border-orange-300 bg-orange-50/30 dark:bg-orange-950/30 dark:border-orange-600' 
+            : 'border-transparent hover:border-primary/20 focus-within:border-primary/30 focus-within:shadow-xl focus-within:shadow-primary/20'
+        }`}
         onSubmit={(event) => {
           event.preventDefault();
           if (status !== 'ready') {
             toast.error('Please wait for the model to finish its response!');
+          } else if (ocrInProgress) {
+            toast.error('请等待图片文字识别完成后再发送消息');
           } else {
             submitForm();
           }
         }}
       >
         {(attachments.length > 0 || uploadQueue.length > 0) && (
-          <div
-            data-testid="attachments-preview"
-            className="flex overflow-x-scroll flex-row gap-2 items-end px-3 py-2"
-          >
-            {attachments.map((attachment) => (
-              <PreviewAttachment
-                key={attachment.url}
-                attachment={attachment}
-                onRemove={() => {
-                  setAttachments((currentAttachments) =>
-                    currentAttachments.filter((a) => a.url !== attachment.url),
-                  );
-                  if (fileInputRef.current) {
-                    fileInputRef.current.value = '';
-                  }
-                }}
-              />
-            ))}
+          <div className="px-3 py-2">
+            <div
+              data-testid="attachments-preview"
+              className="flex overflow-x-scroll flex-row gap-2 items-end"
+            >
+              {attachments.map((attachment) => (
+                <PreviewAttachment
+                  key={attachment.url}
+                  attachment={attachment}
+                  onRemove={() => {
+                    setAttachments((currentAttachments) =>
+                      currentAttachments.filter((a) => a.url !== attachment.url),
+                    );
+                    if (fileInputRef.current) {
+                      fileInputRef.current.value = '';
+                    }
+                  }}
+                />
+              ))}
 
-            {uploadQueue.map((filename) => (
-              <PreviewAttachment
-                key={filename}
-                attachment={{
-                  url: '',
-                  name: filename,
-                  contentType: '',
-                }}
-                isUploading={true}
-              />
-            ))}
+              {uploadQueue.map((filename) => (
+                <PreviewAttachment
+                  key={filename}
+                  attachment={{
+                    url: '',
+                    name: filename,
+                    contentType: '',
+                  }}
+                  isUploading={true}
+                />
+              ))}
+            </div>
+            
+            {/* Global OCR Progress Indicator */}
+            {ocrInProgress && (
+              <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader size={16} />
+                <span>正在识别图片文字，请稍等...</span>
+              </div>
+            )}
           </div>
         )}
 
         <PromptInputTextarea
           data-testid="multimodal-input"
           ref={textareaRef}
-          placeholder="Send a message..."
+          placeholder={ocrInProgress ? "正在识别图片文字，请稍等..." : "Send a message..."}
           value={input}
           onChange={handleInput}
           onPaste={handlePaste}
@@ -352,10 +462,11 @@ function PureMultimodalInput({
           className="text-sm resize-none py-1 px-3 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
           rows={1}
           autoFocus
+          disabled={ocrInProgress}
         />
         <PromptInputToolbar className="px-2 py-1">
           <PromptInputTools className="gap-2">
-            <AttachmentsButton fileInputRef={fileInputRef} status={status} />
+            <AttachmentsButton fileInputRef={fileInputRef} status={status} ocrInProgress={ocrInProgress} />
             <ModelSelectorCompact selectedModelId={selectedModelId} />
           </PromptInputTools>
           {status === 'submitted' ? (
@@ -363,7 +474,7 @@ function PureMultimodalInput({
           ) : (
             <PromptInputSubmit
               status={status}
-              disabled={!input.trim() || uploadQueue.length > 0}
+              disabled={!input.trim() || uploadQueue.length > 0 || ocrInProgress}
               className="bg-primary hover:bg-primary/90 text-primary-foreground size-8"
               size="sm"
             />
@@ -391,9 +502,11 @@ export const MultimodalInput = memo(
 function PureAttachmentsButton({
   fileInputRef,
   status,
+  ocrInProgress = false,
 }: {
   fileInputRef: React.MutableRefObject<HTMLInputElement | null>;
   status: UseChatHelpers<ChatMessage>['status'];
+  ocrInProgress?: boolean;
 }) {
   return (
     <Button
@@ -403,7 +516,7 @@ function PureAttachmentsButton({
         event.preventDefault();
         fileInputRef.current?.click();
       }}
-      disabled={status !== 'ready'}
+      disabled={status !== 'ready' || ocrInProgress}
       variant="ghost"
     >
       <PaperclipIcon size={14} />

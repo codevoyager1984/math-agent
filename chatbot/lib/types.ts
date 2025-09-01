@@ -54,4 +54,6 @@ export interface Attachment {
   name: string;
   url: string;
   contentType: string;
+  ocrText?: string;
+  ocrLoading?: boolean;
 }
