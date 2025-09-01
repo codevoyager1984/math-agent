@@ -21,11 +21,39 @@
   color: hsl(var(--foreground));
 }
 
-/* Basic responsive handling */
+/* Basic responsive handling and spacing */
 .katex-display {
   overflow-x: auto;
   overflow-y: hidden;
-  margin: 1em 0;
+  margin: 1.8em 0 !important;
+}
+
+/* Inline math spacing - higher specificity */
+.katex {
+  margin: 0 0.3em !important;
+}
+
+/* Better spacing for math in paragraphs */
+p .katex {
+  margin: 0 0.4em !important;
+}
+
+/* Extra spacing between text and math */
+p:has(+ .katex-display) {
+  margin-bottom: 1em !important;
+}
+
+.katex-display + p {
+  margin-top: 1em !important;
+}
+
+/* Additional spacing for markdown content */
+.size-full p .katex {
+  margin: 0 0.5em !important;
+}
+
+.size-full .katex-display {
+  margin: 2em 0 !important;
 }
 
 /* Allow horizontal scroll on mobile for long formulas */

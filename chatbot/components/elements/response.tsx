@@ -36,6 +36,10 @@ export const Response = memo(
       <div
         className={cn(
           'size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0',
+          // 添加数学公式间距样式
+          '[&_.katex]:mx-2',
+          '[&_.katex-display]:my-6',
+          '[&_p:has(.katex)]:my-4',
           className,
         )}
       >
