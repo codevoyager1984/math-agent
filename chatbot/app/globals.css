@@ -1,6 +1,40 @@
+/* Import KaTeX CSS for math rendering */
+@import url('https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Minimal KaTeX styling - fix common issues without breaking defaults */
+
+/* Fix overflow issues mentioned in search results */
+.katex .vlist-t2 {
+  margin-right: 0px !important;
+}
+
+/* Ensure KaTeX formulas are visible in dark mode */
+.dark .katex {
+  color: hsl(var(--foreground));
+}
+
+.dark .katex-display {
+  color: hsl(var(--foreground));
+}
+
+/* Basic responsive handling */
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin: 1em 0;
+}
+
+/* Allow horizontal scroll on mobile for long formulas */
+@media (max-width: 640px) {
+  .katex-display {
+    text-align: left;
+    padding: 0 1em;
+  }
+}
 
 :root {
     --foreground-rgb: 0, 0, 0;
