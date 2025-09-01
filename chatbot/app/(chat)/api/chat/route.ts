@@ -18,6 +18,7 @@ import {
   saveMessages,
 } from '@/lib/db/queries';
 import { convertToUIMessages, generateUUID } from '@/lib/utils';
+import type { UIMessage, UIMessagePart } from 'ai';
 import { generateTitleFromUserMessage } from '../../actions';
 import { createDocument } from '@/lib/ai/tools/create-document';
 import { updateDocument } from '@/lib/ai/tools/update-document';
@@ -41,6 +42,27 @@ import type { VisibilityType } from '@/components/visibility-selector';
 export const maxDuration = 60;
 
 let globalStreamContext: ResumableStreamContext | null = null;
+
+// Helper function to filter out image attachments for DeepSeek models
+function filterImageAttachments(messages: UIMessage[]): UIMessage[] {
+  return messages.map(message => ({
+    ...message,
+    parts: message.parts.filter(part => {
+      // Keep text parts and non-file parts
+      if (part.type !== 'file') {
+        return true;
+      }
+      
+      // Filter out image files
+      const isImage = part.mediaType?.startsWith('image/');
+      if (isImage) {
+        console.log(`🖼️ 过滤图片文件: ${(part as any).name || 'unknown'} (${part.mediaType})`);
+      }
+      
+      return !isImage;
+    })
+  }));
+}
 
 export function getStreamContext() {
   if (!globalStreamContext) {
@@ -123,6 +145,17 @@ export async function POST(request: Request) {
 
     const messagesFromDb = await getMessagesByChatId({ id });
     const uiMessages = [...convertToUIMessages(messagesFromDb), message];
+    
+    // Filter out image attachments for DeepSeek models (they don't support images)
+    const filteredMessages = filterImageAttachments(uiMessages);
+    
+    // Log filtering info for debugging
+    const originalPartsCount = uiMessages.reduce((acc, msg) => acc + msg.parts.length, 0);
+    const filteredPartsCount = filteredMessages.reduce((acc, msg) => acc + msg.parts.length, 0);
+    
+    if (originalPartsCount !== filteredPartsCount) {
+      console.log(`🖼️ 已过滤图片附件: ${originalPartsCount - filteredPartsCount} 个图片部分被移除`);
+    }
 
     const { longitude, latitude, city, country } = geolocation(request);
 
@@ -133,14 +166,24 @@ export async function POST(request: Request) {
       country,
     };
 
+    // Extract attachment info from file parts for storage
+    const attachments = message.parts
+      .filter(part => part.type === 'file')
+      .map(part => ({
+        name: (part as any).name || 'unknown',
+        url: part.url,
+        contentType: part.mediaType || 'application/octet-stream',
+      }));
+
+    // Save the original message with attachments for UI display
     await saveMessages({
       messages: [
         {
           chatId: id,
           id: message.id,
           role: 'user',
-          parts: message.parts,
-          attachments: [],
+          parts: message.parts, // Keep original parts including images
+          attachments, // Store attachment metadata
           createdAt: new Date(),
         },
       ],
@@ -154,17 +197,18 @@ export async function POST(request: Request) {
         const result = streamText({
           model: myProvider.languageModel(selectedChatModel),
           system: systemPrompt({ selectedChatModel, requestHints }),
-          messages: convertToModelMessages(uiMessages),
+          messages: convertToModelMessages(filteredMessages),
           stopWhen: stepCountIs(5),
-          experimental_activeTools:
-            selectedChatModel === 'chat-model-reasoning'
-              ? []
-              : [
-                  'getWeather',
-                  'createDocument',
-                  'updateDocument',
-                  'requestSuggestions',
-                ],
+          experimental_activeTools: [],
+          // experimental_activeTools:
+          //   selectedChatModel === 'chat-model-reasoning'
+          //     ? []
+          //     : [
+          //         'getWeather',
+          //         'createDocument',
+          //         'updateDocument',
+          //         'requestSuggestions',
+          //       ],
           experimental_transform: smoothStream({ chunking: 'word' }),
           tools: {
             getWeather,

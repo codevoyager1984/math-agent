@@ -368,7 +368,7 @@ function PureMultimodalInput({
               <Loader size={20} />
               <div className="flex-1">
                 <div className="text-sm font-medium text-foreground">图片文字识别中</div>
-                <div className="text-xs text-muted-foreground">正在使用AI识别图片中的文字内容，请稍等片刻...</div>
+                <div className="text-xs text-muted-foreground">正在使用AI识别图片中的文字内容，您可以继续输入文字，识别完成后即可发送消息</div>
               </div>
             </div>
             <div className="mt-2 w-full bg-background rounded-full h-1.5">
@@ -390,7 +390,7 @@ function PureMultimodalInput({
       <PromptInput
         className={`border transition-all duration-200 shadow-lg shadow-black/10 ${
           ocrInProgress 
-            ? 'border-orange-300 bg-orange-50/30 dark:bg-orange-950/30 dark:border-orange-600' 
+            ? 'border-orange-300 bg-orange-50/20 dark:bg-orange-950/20 dark:border-orange-600' 
             : 'border-transparent hover:border-primary/20 focus-within:border-primary/30 focus-within:shadow-xl focus-within:shadow-primary/20'
         }`}
         onSubmit={(event) => {
@@ -442,7 +442,7 @@ function PureMultimodalInput({
             {ocrInProgress && (
               <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader size={16} />
-                <span>正在识别图片文字，请稍等...</span>
+                <span>正在识别图片文字，识别完成后可发送消息</span>
               </div>
             )}
           </div>
@@ -451,7 +451,7 @@ function PureMultimodalInput({
         <PromptInputTextarea
           data-testid="multimodal-input"
           ref={textareaRef}
-          placeholder={ocrInProgress ? "正在识别图片文字，请稍等..." : "Send a message..."}
+          placeholder={ocrInProgress ? "正在识别图片文字，完成后可发送消息..." : "Send a message..."}
           value={input}
           onChange={handleInput}
           onPaste={handlePaste}
@@ -462,7 +462,6 @@ function PureMultimodalInput({
           className="text-sm resize-none py-1 px-3 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
           rows={1}
           autoFocus
-          disabled={ocrInProgress}
         />
         <PromptInputToolbar className="px-2 py-1">
           <PromptInputTools className="gap-2">
