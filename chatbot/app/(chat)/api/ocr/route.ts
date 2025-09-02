@@ -35,6 +35,7 @@ async function fetchImageAsBase64(imageUrl: string): Promise<{ base64: string; m
 }
 
 export async function POST(request: Request) {
+  console.log('ocr request');
   const endpoint = '/api/ocr';
   const method = 'POST';
 
@@ -46,6 +47,7 @@ export async function POST(request: Request) {
     }
 
     const userId = session.user?.id;
+    console.log('userId', userId);
     const body = await request.json();
     const { imageUrl } = body;
 
@@ -103,7 +105,10 @@ export async function POST(request: Request) {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
+      console.log(`🔴 API request failed: ${response.status}`);
+      console.log(`🔴 API error data: ${JSON.stringify(errorData)}`);
       const errorMessage = errorData.error?.message || `API request failed: ${response.status}`;
+      console.log(`🔴 Error message: ${errorMessage}`);
       return NextResponse.json({ error: errorMessage }, { status: response.status });
     }
 
