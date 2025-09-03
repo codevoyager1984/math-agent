@@ -283,9 +283,30 @@ const PurePreviewMessage = ({
               if (type === 'tool-searchKnowledgePoints') {
                 const { toolCallId, state } = part;
 
+                // 构建带关键词的标题
+                const getKnowledgeSearchTitle = () => {
+                  let query = '';
+                  
+                  if (state === 'input-available' && part.input?.query) {
+                    query = part.input.query;
+                  } else if (state === 'output-available' && part.output?.query) {
+                    query = part.output.query;
+                  }
+                  
+                  if (query) {
+                    return `检索数学知识库: "${query}"`;
+                  }
+                  
+                  return '检索数学知识库';
+                };
+
                 return (
                   <Tool key={toolCallId} defaultOpen={true}>
-                    <ToolHeader type="tool-searchKnowledgePoints" state={state} />
+                    <ToolHeader 
+                      type="tool-searchKnowledgePoints" 
+                      state={state}
+                      customTitle={getKnowledgeSearchTitle()}
+                    />
                     <ToolContent>
                       {state === 'input-available' && (
                         <KnowledgeSearchInput input={part.input} />
