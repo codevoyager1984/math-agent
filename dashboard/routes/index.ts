@@ -15,5 +15,6 @@ export const PATH_LOGIN = {
 
 export const PATH_KNOWLEDGE_BASE = {
   list: path(ROOTS_DASHBOARD, '/knowledge-base'),
+  create: path(ROOTS_DASHBOARD, '/knowledge-base/create'),
 };
 
