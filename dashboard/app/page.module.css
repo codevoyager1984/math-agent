@@ -1,0 +1,56 @@
+.mantine-Center-root {
+  background-color: red;
+}
+
+.mantine-Box-root {
+  background-color: red;
+}
+
+/* 修复mantine-datatable固定列的透明度问题 - 暴力方法 */
+.pinnedColumnFix :global(table) :global(td:last-child) {
+  background-color: white !important;
+  background: white !important;
+  position: sticky !important;
+  right: 0 !important;
+  z-index: 999 !important;
+  box-shadow: -2px 0 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+.pinnedColumnFix :global(table) :global(th:last-child) {
+  background-color: white !important;
+  background: white !important;
+  position: sticky !important;
+  right: 0 !important;
+  z-index: 999 !important;
+  box-shadow: -2px 0 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* 覆盖所有可能的状态 */
+.pinnedColumnFix :global(table) :global(tbody) :global(tr:hover) :global(td:last-child) {
+  background-color: white !important;
+  background: white !important;
+}
+
+.pinnedColumnFix :global(table) :global(tbody) :global(tr:nth-child(odd)) :global(td:last-child) {
+  background-color: white !important;
+  background: white !important;
+}
+
+.pinnedColumnFix :global(table) :global(tbody) :global(tr:nth-child(even)) :global(td:last-child) {
+  background-color: white !important;
+  background: white !important;
+}
+
+/* 针对dark mode */
+[data-mantine-color-scheme="dark"] .pinnedColumnFix :global(table) :global(td:last-child),
+[data-mantine-color-scheme="dark"] .pinnedColumnFix :global(table) :global(th:last-child) {
+  background-color: #1a1b1e !important;
+  background: #1a1b1e !important;
+}
+
+[data-mantine-color-scheme="dark"] .pinnedColumnFix :global(table) :global(tbody) :global(tr:hover) :global(td:last-child),
+[data-mantine-color-scheme="dark"] .pinnedColumnFix :global(table) :global(tbody) :global(tr:nth-child(odd)) :global(td:last-child),
+[data-mantine-color-scheme="dark"] .pinnedColumnFix :global(table) :global(tbody) :global(tr:nth-child(even)) :global(td:last-child) {
+  background-color: #1a1b1e !important;
+  background: #1a1b1e !important;
+}
