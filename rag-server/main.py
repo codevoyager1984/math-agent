@@ -166,6 +166,6 @@ if __name__ == "__main__":
         "main:app",
         host=settings.HOST,
         port=settings.PORT,
-        reload=True,  # 开发模式
+        reload=settings.HOT_RELOAD,  # 开发模式
         log_level="info"
     )

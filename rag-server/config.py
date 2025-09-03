@@ -13,6 +13,7 @@ class Settings:
     # 服务配置
     HOST: str = os.getenv("HOST", "0.0.0.0")
     PORT: int = int(os.getenv("PORT", "8000"))
+    HOT_RELOAD: bool = os.getenv("HOT_RELOAD", "False") == "True"
     
     # ChromaDB 配置
     CHROMA_HOST: str = os.getenv("CHROMA_HOST", "localhost")
