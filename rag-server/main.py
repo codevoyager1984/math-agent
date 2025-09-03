@@ -12,6 +12,8 @@ import time
 from api import router
 from schemas.common import ErrorResponse
 from services.rag_service import rag_service
+from config import settings
+
 
 # 配置日志
 logging.basicConfig(
@@ -162,8 +164,8 @@ async def read_root():
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",
-        host="0.0.0.0",
-        port=8000,
+        host=settings.HOST,
+        port=settings.PORT,
         reload=True,  # 开发模式
         log_level="info"
     )
