@@ -151,6 +151,44 @@ class ChromaDBService:
             logger.error(f"查询文档失败: {e}")
             raise
     
+    async def upsert_documents(
+        self,
+        collection_name: str,
+        documents: List[str],
+        ids: List[str],
+        embeddings: List[List[float]],
+        metadatas: Optional[List[Dict[str, Any]]] = None
+    ) -> bool:
+        """
+        更新或插入文档到集合（upsert操作）
+        
+        Args:
+            collection_name: 集合名称
+            documents: 文档内容列表
+            ids: 文档ID列表
+            embeddings: 嵌入向量列表
+            metadatas: 元数据列表
+            
+        Returns:
+            是否成功
+        """
+        try:
+            collection = await self.get_or_create_collection(collection_name)
+            
+            await collection.upsert(
+                documents=documents,
+                ids=ids,
+                embeddings=embeddings,
+                metadatas=metadatas
+            )
+            
+            logger.info(f"成功upsert {len(documents)} 个文档到集合 {collection_name}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Upsert文档失败: {e}")
+            raise
+
     async def delete_documents(
         self,
         collection_name: str,

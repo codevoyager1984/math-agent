@@ -136,6 +136,54 @@ class RAGService:
             logger.error(f"查询文档失败: {e}")
             raise
     
+    async def upsert_documents(
+        self,
+        documents: List[DocumentInput],
+        collection_name: str = "math_knowledge"
+    ) -> bool:
+        """
+        更新或插入文档到知识库（upsert操作）
+        
+        Args:
+            documents: 文档列表
+            collection_name: 集合名称
+            
+        Returns:
+            是否成功
+        """
+        try:
+            # 提取文档内容和元数据
+            contents = [doc.content for doc in documents]
+            ids = [doc.id for doc in documents]
+            metadatas = [doc.metadata for doc in documents if doc.metadata]
+            
+            # 如果没有元数据，设置为 None
+            if not metadatas or len(metadatas) != len(documents):
+                metadatas = None
+            
+            # 生成嵌入向量
+            logger.info(f"正在为 {len(documents)} 个文档生成嵌入向量...")
+            embeddings = await self.embedding_service.encode_batch(contents)
+            
+            # Upsert到 ChromaDB
+            logger.info(f"正在将文档upsert到集合 {collection_name}...")
+            success = await self.chroma_service.upsert_documents(
+                collection_name=collection_name,
+                documents=contents,
+                ids=ids,
+                embeddings=embeddings,
+                metadatas=metadatas
+            )
+            
+            if success:
+                logger.info(f"成功upsert {len(documents)} 个文档到知识库")
+            
+            return success
+            
+        except Exception as e:
+            logger.error(f"Upsert文档到知识库失败: {e}")
+            raise
+
     async def delete_documents(
         self,
         ids: List[str],

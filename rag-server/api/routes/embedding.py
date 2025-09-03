@@ -3,6 +3,7 @@ FastAPI 路由定义
 """
 from datetime import datetime
 import json
+import traceback
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, status, Query
 from fastapi.responses import JSONResponse
@@ -20,45 +21,6 @@ logger = logging.getLogger(__name__)
 
 # 创建路由器
 router = APIRouter()
-
-
-@router.post(
-    "/documents",
-    response_model=dict,
-    status_code=status.HTTP_201_CREATED,
-    summary="添加文档",
-    description="批量添加文档到知识库"
-)
-async def add_documents(request: DocumentsAddRequest):
-    """
-    添加文档到知识库
-    
-    - **documents**: 文档列表，每个文档包含 id, content 和可选的 metadata
-    """
-    try:
-        success = await rag_service.add_documents(
-            documents=request.documents,
-            collection_name="math_knowledge"
-        )
-        
-        if success:
-            return {
-                "message": f"成功添加 {len(request.documents)} 个文档",
-                "collection_name": "math_knowledge",
-                "count": len(request.documents)
-            }
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="添加文档失败"
-            )
-            
-    except Exception as e:
-        logger.error(f"添加文档接口错误: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"添加文档失败: {str(e)}"
-        )
 
 
 @router.post(
@@ -112,6 +74,7 @@ async def add_knowledge_point(request: KnowledgePointAddRequest):
             } for ex in knowledge_point.examples
         ]
         
+        current_time = datetime.now().isoformat()
         metadata = {
             "type": "knowledge_point",
             "title": knowledge_point.title,
@@ -120,7 +83,8 @@ async def add_knowledge_point(request: KnowledgePointAddRequest):
             "tags": json.dumps(knowledge_point.tags or [], ensure_ascii=False),  # 序列化为JSON字符串
             "examples": json.dumps(examples_data, ensure_ascii=False),  # 序列化为JSON字符串
             "examples_count": len(knowledge_point.examples),
-            "created_at": datetime.now().isoformat()
+            "created_at": current_time,
+            "updated_at": current_time
         }
         
         # 创建文档
@@ -145,7 +109,8 @@ async def add_knowledge_point(request: KnowledgePointAddRequest):
                 category=metadata["category"],
                 examples=examples_data,  # 直接使用原始数据
                 tags=knowledge_point.tags or [],  # 直接使用原始数据
-                created_at=metadata["created_at"]
+                created_at=metadata["created_at"],
+                updated_at=metadata["updated_at"]
             )
         else:
             raise HTTPException(
@@ -193,52 +158,6 @@ async def query_documents(request: QueryRequest):
         )
 
 
-@router.delete(
-    "/documents",
-    response_model=dict,
-    summary="删除文档",
-    description="根据ID列表删除文档"
-)
-async def delete_documents(ids: List[str]):
-    """
-    删除文档
-    
-    - **ids**: 要删除的文档ID列表
-    """
-    try:
-        if not ids:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="文档ID列表不能为空"
-            )
-        
-        success = await rag_service.delete_documents(
-            ids=ids,
-            collection_name="math_knowledge"
-        )
-        
-        if success:
-            return {
-                "message": f"成功删除 {len(ids)} 个文档",
-                "collection_name": "math_knowledge",
-                "deleted_ids": ids
-            }
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="删除文档失败"
-            )
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"删除文档接口错误: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"删除文档失败: {str(e)}"
-        )
-
-
 @router.get(
     "/collections/{collection_name}",
     response_model=CollectionInfo,
@@ -262,27 +181,6 @@ async def get_collection_info(collection_name: str):
             detail=f"获取集合信息失败: {str(e)}"
         )
 
-
-@router.get(
-    "/collections",
-    response_model=List[str],
-    summary="列出所有集合",
-    description="获取所有可用集合的名称列表"
-)
-async def list_collections():
-    """
-    列出所有集合
-    """
-    try:
-        collections = await rag_service.list_collections()
-        return collections
-        
-    except Exception as e:
-        logger.error(f"列出集合接口错误: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"获取集合列表失败: {str(e)}"
-        )
 
 @router.get(
     "/knowledge-points",
@@ -447,7 +345,7 @@ async def get_knowledge_point(knowledge_id: str):
         return KnowledgePointResponse(
             id=knowledge_id,
             title=metadata.get("title", ""),
-            description=document,
+            description=metadata.get("description", ""),  # 使用metadata中的原始description
             category=metadata.get("category", "general"),
             examples=examples_data,  # 直接使用字典列表
             tags=tags,
@@ -475,60 +373,106 @@ async def update_knowledge_point(knowledge_id: str, request: KnowledgePointAddRe
     - **request**: 更新的知识点数据
     """
     try:
-        # 先删除原有的知识点
-        delete_success = await rag_service.delete_documents(
-            ids=[knowledge_id],
-            collection_name="math_knowledge"
-        )
+        from schemas.embeddings import DocumentInput
         
-        if not delete_success:
-            raise HTTPException(status_code=404, detail="知识点不存在")
-        
-        # 添加更新后的知识点（使用相同的ID）
         knowledge_point = request.knowledge_point
         
-        # 序列化复杂类型到JSON
-        metadata = {
-            "title": knowledge_point.title,
-            "category": knowledge_point.category,
-            "tags": json.dumps(knowledge_point.tags) if knowledge_point.tags else "[]",
-            "examples": json.dumps([{
+        # 获取原有知识点的创建时间
+        existing_created_at = None
+        try:
+            # 查询现有知识点获取创建时间
+            existing_result = await rag_service.query_documents(
+                query=knowledge_id,
+                n_results=1000,
+                collection_name="math_knowledge"
+            )
+            
+            # 查找匹配的ID
+            for doc_result in existing_result.results:
+                if doc_result.id == knowledge_id and doc_result.metadata:
+                    existing_created_at = doc_result.metadata.get("created_at")
+                    break
+        except Exception as e:
+            logger.warning(f"无法获取原有创建时间: {e}")
+            # 如果无法获取原有时间，使用当前时间作为创建时间
+            existing_created_at = datetime.now().isoformat()
+        
+        # 准备文档内容 - 主要用于向量搜索
+        content_parts = [
+            f"知识点: {knowledge_point.title}",
+            f"描述: {knowledge_point.description}",
+            f"分类: {knowledge_point.category or 'general'}"
+        ]
+        
+        # 添加例题到内容中用于向量搜索
+        for i, example in enumerate(knowledge_point.examples, 1):
+            content_parts.extend([
+                f"例题{i}: {example.question}",
+                f"解答步骤: {example.solution}"
+            ])
+        
+        if knowledge_point.tags:
+            content_parts.append(f"标签: {', '.join(knowledge_point.tags)}")
+        
+        document_content = "\n".join(content_parts)
+        
+        # 准备元数据 - 存储完整的结构化数据（序列化复杂类型）
+        examples_data = [
+            {
                 "question": ex.question,
                 "solution": ex.solution,
                 "difficulty": ex.difficulty
-            } for ex in knowledge_point.examples]),
-            "created_at": datetime.now().isoformat(),
+            } for ex in knowledge_point.examples
+        ]
+        
+        metadata = {
+            "type": "knowledge_point",
+            "title": knowledge_point.title,
+            "description": knowledge_point.description,
+            "category": knowledge_point.category or "general",
+            "tags": json.dumps(knowledge_point.tags or [], ensure_ascii=False),  # 序列化为JSON字符串
+            "examples": json.dumps(examples_data, ensure_ascii=False),  # 序列化为JSON字符串
+            "examples_count": len(knowledge_point.examples),
+            "created_at": existing_created_at or datetime.now().isoformat(),  # 保留原有创建时间
             "updated_at": datetime.now().isoformat()
         }
         
-        # 使用原有ID重新添加
-        await rag_service.add_documents(
-            documents=[knowledge_point.description],
-            metadatas=[metadata],
-            ids=[knowledge_id],
+        # 创建文档
+        document = DocumentInput(
+            id=knowledge_id,
+            content=document_content,
+            metadata=metadata
+        )
+        
+        # 使用 upsert 更新或插入文档
+        success = await rag_service.upsert_documents(
+            documents=[document],
             collection_name="math_knowledge"
         )
         
-        # 反序列化用于响应
-        response_metadata = metadata.copy()
-        response_metadata["tags"] = json.loads(response_metadata["tags"])
-        response_metadata["examples"] = json.loads(response_metadata["examples"])
-        
-        return KnowledgePointResponse(
-            id=knowledge_id,
-            title=knowledge_point.title,
-            description=knowledge_point.description,
-            category=knowledge_point.category,
-            examples=[ExampleInput(**ex) for ex in response_metadata["examples"]],
-            tags=response_metadata["tags"],
-            created_at=response_metadata["created_at"],
-            updated_at=response_metadata["updated_at"]
-        )
+        if success:
+            # 返回知识点信息（反序列化JSON数据）
+            return KnowledgePointResponse(
+                id=knowledge_id,
+                title=metadata["title"],
+                description=knowledge_point.description,  # 使用原始的description
+                category=metadata["category"],
+                examples=examples_data,  # 直接使用原始数据
+                tags=knowledge_point.tags or [],  # 直接使用原始数据
+                created_at=metadata["created_at"],
+                updated_at=metadata["updated_at"]
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="更新知识点失败"
+            )
         
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"更新知识点失败: {str(e)}")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"更新知识点失败: {str(e)}")
 
 
