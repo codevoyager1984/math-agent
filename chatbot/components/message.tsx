@@ -27,6 +27,8 @@ import { MessageReasoning } from './message-reasoning';
 import type { UseChatHelpers } from '@ai-sdk/react';
 import type { ChatMessage } from '@/lib/types';
 import { useDataStream } from './data-stream-provider';
+import { KnowledgeSearch } from './knowledge-search';
+import { KnowledgeSearchInput } from './knowledge-search-input';
 
 // Type narrowing is handled by TypeScript's control flow analysis
 // The AI SDK provides proper discriminated unions for tool calls
@@ -267,6 +269,39 @@ const PurePreviewMessage = ({
                                 type="request-suggestions"
                                 result={part.output}
                                 isReadonly={isReadonly}
+                              />
+                            )
+                          }
+                          errorText={undefined}
+                        />
+                      )}
+                    </ToolContent>
+                  </Tool>
+                );
+              }
+
+              if (type === 'tool-searchKnowledgePoints') {
+                const { toolCallId, state } = part;
+
+                return (
+                  <Tool key={toolCallId} defaultOpen={true}>
+                    <ToolHeader type="tool-searchKnowledgePoints" state={state} />
+                    <ToolContent>
+                      {state === 'input-available' && (
+                        <KnowledgeSearchInput input={part.input} />
+                      )}
+                      {state === 'output-available' && (
+                        <ToolOutput
+                          output={
+                            'error' in part.output ? (
+                              <div className="p-2 text-red-500 rounded border">
+                                Error: {String(part.output.error)}
+                              </div>
+                            ) : (
+                              <KnowledgeSearch
+                                query={part.output.query}
+                                knowledgePoints={part.output.knowledgePoints}
+                                totalFound={part.output.totalFound}
                               />
                             )
                           }

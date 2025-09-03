@@ -24,6 +24,7 @@ import { createDocument } from '@/lib/ai/tools/create-document';
 import { updateDocument } from '@/lib/ai/tools/update-document';
 import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
 import { getWeather } from '@/lib/ai/tools/get-weather';
+import { searchKnowledgePoints } from '@/lib/ai/tools/search-knowledge-points';
 import { isProductionEnvironment } from '@/lib/constants';
 import { myProvider } from '@/lib/ai/providers';
 import { entitlementsByUserType } from '@/lib/ai/entitlements';
@@ -199,7 +200,7 @@ export async function POST(request: Request) {
           system: systemPrompt({ selectedChatModel, requestHints }),
           messages: convertToModelMessages(filteredMessages),
           stopWhen: stepCountIs(5),
-          experimental_activeTools: [],
+          experimental_activeTools: ['searchKnowledgePoints'],
           // experimental_activeTools:
           //   selectedChatModel === 'chat-model-reasoning'
           //     ? []
@@ -215,6 +216,10 @@ export async function POST(request: Request) {
             createDocument: createDocument({ session, dataStream }),
             updateDocument: updateDocument({ session, dataStream }),
             requestSuggestions: requestSuggestions({
+              session,
+              dataStream,
+            }),
+            searchKnowledgePoints: searchKnowledgePoints({
               session,
               dataStream,
             }),

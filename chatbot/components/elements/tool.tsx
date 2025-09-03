@@ -57,6 +57,18 @@ const getStatusBadge = (status: ToolUIPart['state']) => {
   );
 };
 
+// 工具类型到友好显示名称的映射
+const getToolDisplayName = (type: string): string => {
+  const toolNameMap: Record<string, string> = {
+    'tool-searchKnowledgePoints': '检索数学知识库',
+    'tool-getWeather': '获取天气信息',
+    'tool-createDocument': '创建文档',
+    'tool-updateDocument': '更新文档',
+    'tool-requestSuggestions': '请求建议',
+  };
+  return toolNameMap[type] || type;
+};
+
 export const ToolHeader = ({
   className,
   type,
@@ -72,7 +84,7 @@ export const ToolHeader = ({
   >
     <div className="flex items-center gap-2 min-w-0 flex-1">
       <WrenchIcon className="size-4 text-muted-foreground shrink-0" />
-      <span className="font-medium text-sm truncate">{type}</span>
+      <span className="font-medium text-sm truncate">{getToolDisplayName(type)}</span>
     </div>
     <div className="flex items-center gap-2 shrink-0">
       {getStatusBadge(state)}

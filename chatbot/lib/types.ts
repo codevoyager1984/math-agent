@@ -3,6 +3,7 @@ import type { getWeather } from './ai/tools/get-weather';
 import type { createDocument } from './ai/tools/create-document';
 import type { updateDocument } from './ai/tools/update-document';
 import type { requestSuggestions } from './ai/tools/request-suggestions';
+import type { searchKnowledgePoints } from './ai/tools/search-knowledge-points';
 import type { InferUITool, UIMessage } from 'ai';
 
 import type { ArtifactKind } from '@/components/artifact';
@@ -22,12 +23,16 @@ type updateDocumentTool = InferUITool<ReturnType<typeof updateDocument>>;
 type requestSuggestionsTool = InferUITool<
   ReturnType<typeof requestSuggestions>
 >;
+type searchKnowledgePointsTool = InferUITool<
+  ReturnType<typeof searchKnowledgePoints>
+>;
 
 export type ChatTools = {
   getWeather: weatherTool;
   createDocument: createDocumentTool;
   updateDocument: updateDocumentTool;
   requestSuggestions: requestSuggestionsTool;
+  searchKnowledgePoints: searchKnowledgePointsTool;
 };
 
 export type CustomUIDataTypes = {
@@ -42,6 +47,31 @@ export type CustomUIDataTypes = {
   kind: ArtifactKind;
   clear: null;
   finish: null;
+  'knowledge-search-start': {
+    query: string;
+    category?: string;
+  };
+  'knowledge-search-result': {
+    query: string;
+    knowledgePoints: Array<{
+      id: string;
+      title: string;
+      description: string;
+      category: string;
+      examples: Array<{
+        question: string;
+        solution: string;
+        difficulty: string;
+      }>;
+      tags: string[];
+      relevanceScore: number;
+    }>;
+    totalFound: number;
+  };
+  'knowledge-search-finish': null;
+  'knowledge-search-error': {
+    error: string;
+  };
 };
 
 export type ChatMessage = UIMessage<
