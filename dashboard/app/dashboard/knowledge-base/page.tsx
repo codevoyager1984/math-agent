@@ -33,6 +33,7 @@ import {
   KnowledgePoint, 
   KnowledgePointListParams,
 } from '@/api/knowledge';
+import { PATH_KNOWLEDGE_BASE } from '@/routes';
 
 const RECORDS_PER_PAGE = 12;
 
@@ -113,6 +114,11 @@ export default function KnowledgeBasePage() {
   const handleViewDetail = (knowledgePoint: KnowledgePoint) => {
     setSelectedKnowledge(knowledgePoint);
     openDetail();
+  };
+
+  // 编辑知识点
+  const handleEdit = (id: string) => {
+    router.push(PATH_KNOWLEDGE_BASE.edit(id));
   };
 
   // 创建知识点
@@ -245,6 +251,7 @@ export default function KnowledgeBasePage() {
                     key={knowledgePoint.id}
                     knowledgePoint={knowledgePoint}
                     onView={handleViewDetail}
+                    onEdit={handleEdit}
                     onDelete={handleDelete}
                   />
                 ))}

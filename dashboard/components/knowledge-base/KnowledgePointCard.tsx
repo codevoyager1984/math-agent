@@ -1,12 +1,13 @@
 import React from 'react';
 import { Card, Group, Stack, Text, Badge, ActionIcon } from '@mantine/core';
-import { IconEye, IconTrash, IconBulb, IconTag } from '@tabler/icons-react';
+import { IconEye, IconTrash, IconBulb, IconTag, IconEdit } from '@tabler/icons-react';
 import { KnowledgePoint } from '@/api/knowledge';
 import { formatTimestamp } from '@/utils';
 
 interface KnowledgePointCardProps {
   knowledgePoint: KnowledgePoint;
   onView: (knowledgePoint: KnowledgePoint) => void;
+  onEdit: (id: string) => void;
   onDelete: (knowledgePoint: KnowledgePoint) => void;
 }
 
@@ -27,7 +28,7 @@ const categoryLabels = {
   general: '通用',
 };
 
-export default function KnowledgePointCard({ knowledgePoint, onView, onDelete }: KnowledgePointCardProps) {
+export default function KnowledgePointCard({ knowledgePoint, onView, onEdit, onDelete }: KnowledgePointCardProps) {
   const formatDate = (dateString?: string) => {
     return formatTimestamp.dateTime(dateString);
   };
@@ -54,14 +55,25 @@ export default function KnowledgePointCard({ knowledgePoint, onView, onDelete }:
               color="blue"
               size="sm"
               onClick={() => onView(knowledgePoint)}
+              title="查看详情"
             >
               <IconEye size={14} />
+            </ActionIcon>
+            <ActionIcon
+              variant="light"
+              color="orange"
+              size="sm"
+              onClick={() => onEdit(knowledgePoint.id)}
+              title="编辑"
+            >
+              <IconEdit size={14} />
             </ActionIcon>
             <ActionIcon
               variant="light"
               color="red"
               size="sm"
               onClick={() => onDelete(knowledgePoint)}
+              title="删除"
             >
               <IconTrash size={14} />
             </ActionIcon>

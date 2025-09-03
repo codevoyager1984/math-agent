@@ -51,6 +51,17 @@ export const addKnowledgePoint = async (knowledgePoint: KnowledgePointInput): Pr
   });
 };
 
+// 更新知识点
+export const updateKnowledgePoint = async (id: string, knowledgePoint: KnowledgePointInput): Promise<KnowledgePoint> => {
+  return await request<KnowledgePoint>({
+    url: `/embedding/knowledge-points/${id}`,
+    method: 'PUT',
+    data: {
+      knowledge_point: knowledgePoint
+    },
+  });
+};
+
 // 获取知识点列表
 export const getKnowledgePoints = async (params?: KnowledgePointListParams): Promise<KnowledgePointsResponse> => {
   return await request<KnowledgePointsResponse>({
