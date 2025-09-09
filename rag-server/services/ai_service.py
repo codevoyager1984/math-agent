@@ -124,7 +124,7 @@ class AIService:
     {{
       "title": "知识点标题",
       "description": "完整描述，包含概念、定义、公式、方法、原理、应用场景等。对于完整教学材料，这里应该包含所有相关的理论内容。保持原文的格式、换行、编号、加粗等结构化信息。",
-      "category": "数学分类（如：数列、函数、几何、概率等）",
+      "category": "使用以下预定义的英文分类值之一：sequence（数列）、algebra（代数）、geometry（几何）、calculus（微积分）、statistics（概率统计）、linear-algebra（线性代数）、discrete-math（离散数学）、number-theory（数论）、general（通用）",
       "examples": [
         {{
           "question": "原文中的例题问题（完全保持原文，包括换行、数学公式、格式）",
@@ -146,6 +146,7 @@ class AIService:
 6. 保持原文的格式和换行信息，包括数学公式、分段、缩进等
 7. 在description和examples中保留原文的结构化信息（如：1. 2. 3.编号、**加粗**、分段等）
 8. 数学公式和符号必须完全按照原文格式保留
+9. category字段必须使用预定义的英文分类值，不要使用中文或其他自定义分类
 
 文档内容：
 {text}
