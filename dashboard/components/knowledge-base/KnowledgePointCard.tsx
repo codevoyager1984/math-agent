@@ -80,7 +80,7 @@ export default function KnowledgePointCard({ knowledgePoint, onView, onEdit, onD
           </Group>
         </Group>
 
-        {/* Category */}
+        {/* Category and Similarity */}
         <Group gap="xs">
           <Badge variant="light" color="blue" size="sm">
             {categoryLabels[knowledgePoint.category as keyof typeof categoryLabels] || knowledgePoint.category}
@@ -88,6 +88,16 @@ export default function KnowledgePointCard({ knowledgePoint, onView, onEdit, onD
           <Badge variant="outline" color="green" size="sm">
             {knowledgePoint.examples.length} 题
           </Badge>
+          {/* 显示相似度分数（仅在搜索时显示） */}
+          {knowledgePoint.similarity_score !== undefined && knowledgePoint.similarity_score !== null && (
+            <Badge 
+              variant="gradient" 
+              gradient={{ from: 'orange', to: 'red', deg: 45 }}
+              size="sm"
+            >
+              相似度 {knowledgePoint.similarity_score.toFixed(1)}%
+            </Badge>
+          )}
         </Group>
 
         {/* Description */}

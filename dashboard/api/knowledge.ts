@@ -24,6 +24,7 @@ export interface KnowledgePoint {
   tags: string[];
   created_at?: string;
   updated_at?: string;
+  similarity_score?: number;
 }
 
 export interface KnowledgePointsResponse {

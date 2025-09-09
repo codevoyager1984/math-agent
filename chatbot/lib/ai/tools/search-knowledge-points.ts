@@ -44,6 +44,7 @@ export const searchKnowledgePoints = ({ session, dataStream }: SearchKnowledgePo
 
         const data = await response.json();
         
+        console.log(`🔍 知识点搜索原始内容:`, data);
         // 记录搜索结果的详细信息
         console.log(`🔍 知识点搜索结果:`, {
           query,

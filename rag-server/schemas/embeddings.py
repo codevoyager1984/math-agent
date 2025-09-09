@@ -75,6 +75,7 @@ class KnowledgePointResponse(BaseModel):
     tags: List[str] = Field(..., description="标签列表")
     created_at: Optional[str] = Field(default=None, description="创建时间")
     updated_at: Optional[str] = Field(default=None, description="更新时间")
+    similarity_score: Optional[float] = Field(default=None, description="相似度分数(仅在搜索时返回)")
 
 
 class KnowledgePointsResponse(BaseModel):
