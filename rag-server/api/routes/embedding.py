@@ -250,6 +250,12 @@ async def get_knowledge_points(
                 )
                 knowledge_points.append(knowledge_point)
         
+        # 按照创建时间从新到旧排序
+        knowledge_points.sort(
+            key=lambda kp: kp.created_at or "1970-01-01T00:00:00",
+            reverse=True
+        )
+        
         # 分页处理
         start = (page - 1) * limit
         end = start + limit
