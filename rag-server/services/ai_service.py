@@ -48,6 +48,7 @@ class AIService:
         logger.info(f"[{request_id}] Starting knowledge point generation")
         logger.info(f"[{request_id}] Input text length: {len(text)} characters")
         logger.info(f"[{request_id}] Max knowledge points: {max_points}")
+        logger.info(f"[{request_id}] Document text: {text}")
         
         try:
             # Prepare the prompt for knowledge point extraction
@@ -87,42 +88,69 @@ class AIService:
     def _create_extraction_prompt(self, text: str, max_points: int) -> str:
         """Create a structured prompt for knowledge point extraction"""
         prompt = f"""
-你是一个数学知识专家，需要从给定的文档中提取数学知识点。
+你是一个数学知识专家，需要从给定的文档中智能提取数学知识点。
 
-请仔细分析以下文档内容，提取出最多 {max_points} 个有价值的数学知识点。
+【第一步：文档结构分析】
+请首先分析文档结构，判断文档类型：
 
-对于每个知识点，请按以下JSON格式输出：
+类型A - 完整教学材料：
+- 有统一主题和明确标题
+- 包含教学结构（如：原则阐述、方法介绍、例题分析、练习等）
+- 内容围绕单一核心知识点展开
+- 示例：《数列求通项公式法》、《二次函数性质》等
+
+类型B - 混合内容文档：
+- 包含多个不相关的数学主题
+- 各部分内容相对独立
+- 没有统一的教学结构
+
+【第二步：知识点提取策略】
+
+如果是类型A（完整教学材料）：
+- 提取1个核心知识点
+- 将概念、公式、方法、原理等整合到description中
+- 完全保持原文中例题的内容和解题步骤，不做任何修改
+- 如果有课后练习，也作为examples包含
+
+如果是类型B（混合内容文档）：
+- 根据内容提取多个独立知识点（不超过{max_points}个）
+- 每个知识点应该是完整且独立的概念
+
+【第三步：输出格式】
+按以下JSON格式输出：
 {{
+  "document_type": "complete_tutorial|mixed_content",
   "knowledge_points": [
     {{
-      "title": "知识点标题（简洁明了）",
-      "description": "详细描述该知识点的概念、定义和应用场景",
-      "category": "分类（如：代数、几何、微积分、概率统计、线性代数等）",
+      "title": "知识点标题",
+      "description": "完整描述，包含概念、定义、公式、方法、原理、应用场景等。对于完整教学材料，这里应该包含所有相关的理论内容。保持原文的格式、换行、编号、加粗等结构化信息。",
+      "category": "数学分类（如：数列、函数、几何、概率等）",
       "examples": [
         {{
-          "question": "具体的数学题目或例子",
-          "solution": "详细的解题步骤和答案",
-          "difficulty": "easy|medium|hard"
+          "question": "原文中的例题问题（完全保持原文，包括换行、数学公式、格式）",
+          "solution": "原文中的解答过程（完全保持原文格式、步骤、换行、编号、数学公式等，不修改）", 
+          "difficulty": "根据题目复杂度判断：easy|medium|hard"
         }}
       ],
-      "tags": ["相关标签1", "相关标签2", "相关标签3"]
+      "tags": ["核心标签1", "核心标签2", "核心标签3"]
     }}
   ]
 }}
 
-要求：
-1. 每个知识点必须是独立且有意义的数学概念
-2. 描述要准确、详细，包含定义和应用
-3. 至少为每个知识点提供1-3个例题
-4. 例题要有完整的解题步骤
-5. 标签要准确反映知识点的特征
-6. 分类要规范（使用标准数学分类）
-7. 输出必须是有效的JSON格式
+【重要要求】
+1. 对于完整教学材料，绝不过度拆分，提取1个核心知识点即可
+2. 例题内容必须完全来自原文，保持原有的表述、符号、解题步骤不变
+3. 不要修改、简化或重新组织例题的解答过程
+4. description要充分整合原文的所有理论内容
+5. 优先保持内容完整性，避免为了凑数量而拆分
+6. 保持原文的格式和换行信息，包括数学公式、分段、缩进等
+7. 在description和examples中保留原文的结构化信息（如：1. 2. 3.编号、**加粗**、分段等）
+8. 数学公式和符号必须完全按照原文格式保留
 
 文档内容：
 {text}
 
-请直接输出JSON，不要包含其他文字说明：
+请直接输出JSON：
 """
         return prompt
     
@@ -138,7 +166,7 @@ class AIService:
                     "content": prompt
                 }
             ],
-            "max_tokens": 8000,
+            "max_tokens": 8192,
             "temperature": 0.3,
             "stream": False
         }
@@ -236,6 +264,10 @@ class AIService:
                 logger.error(f"[{request_id}] Invalid response format: missing 'knowledge_points' key")
                 logger.error(f"[{request_id}] Available keys: {list(parsed_data.keys())}")
                 raise ValueError("Invalid response format: missing 'knowledge_points'")
+            
+            # Log document type if present
+            document_type = parsed_data.get("document_type", "unknown")
+            logger.info(f"[{request_id}] Document type identified as: {document_type}")
             
             raw_knowledge_points = parsed_data["knowledge_points"]
             logger.info(f"[{request_id}] Found {len(raw_knowledge_points)} raw knowledge points to process")
