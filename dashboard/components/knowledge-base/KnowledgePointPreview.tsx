@@ -27,6 +27,7 @@ import {
 } from '@tabler/icons-react';
 import { toast } from 'sonner';
 import { KnowledgePointInput, batchAddKnowledgePoints, BatchKnowledgePointsResponse } from '@/api/knowledge';
+import { CATEGORY_OPTIONS } from '@/constants/categories';
 import EditableKnowledgePointCard from './EditableKnowledgePointCard';
 
 interface KnowledgePointPreviewProps {
@@ -38,17 +39,6 @@ interface KnowledgePointPreviewProps {
   onSuccess: () => void;
 }
 
-const CATEGORY_OPTIONS = [
-  { value: 'algebra', label: '代数' },
-  { value: 'geometry', label: '几何' },
-  { value: 'calculus', label: '微积分' },
-  { value: 'statistics', label: '概率统计' },
-  { value: 'linear-algebra', label: '线性代数' },
-  { value: 'discrete-math', label: '离散数学' },
-  { value: 'number-theory', label: '数论' },
-  { value: 'sequence', label: '数列' },
-  { value: 'general', label: '通用' },
-];
 
 export default function KnowledgePointPreview({
   opened,

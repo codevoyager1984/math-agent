@@ -17,6 +17,7 @@ import {
 } from '@mantine/core';
 import { IconPlus, IconTrash, IconGripVertical } from '@tabler/icons-react';
 import { KnowledgePointInput, Example } from '@/api/knowledge';
+import { CATEGORY_OPTIONS } from '@/constants/categories';
 
 interface EditableKnowledgePointCardProps {
   knowledgePoint: KnowledgePointInput;
@@ -27,17 +28,6 @@ interface EditableKnowledgePointCardProps {
   onDelete: (index: number) => void;
 }
 
-const CATEGORY_OPTIONS = [
-  { value: 'algebra', label: '代数' },
-  { value: 'geometry', label: '几何' },
-  { value: 'calculus', label: '微积分' },
-  { value: 'statistics', label: '概率统计' },
-  { value: 'linear-algebra', label: '线性代数' },
-  { value: 'discrete-math', label: '离散数学' },
-  { value: 'number-theory', label: '数论' },
-  { value: 'sequence', label: '数列' },
-  { value: 'general', label: '通用' },
-];
 
 const DIFFICULTY_OPTIONS = [
   { value: 'easy', label: '简单' },

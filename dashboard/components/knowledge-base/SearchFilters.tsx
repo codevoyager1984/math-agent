@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card, Stack, Group, TextInput, Select, Button } from '@mantine/core';
 import { IconSearch } from '@tabler/icons-react';
+import { getCategoryOptionsWithAll } from '@/constants/categories';
 
 interface SearchFiltersProps {
   search: string;
@@ -41,10 +42,7 @@ export default function SearchFilters({
             placeholder="选择分类"
             value={categoryFilter}
             onChange={(value) => onCategoryChange(value || 'all')}
-            data={[
-              { value: 'all', label: '全部分类' },
-              { value: 'sequence', label: '数列' },
-            ]}
+            data={getCategoryOptionsWithAll()}
             style={{ minWidth: 120 }}
           />
           <Group gap="sm">

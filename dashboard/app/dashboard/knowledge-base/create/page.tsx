@@ -19,6 +19,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import PageHeader from '@/components/PageHeader/PageHeader';
 import { addKnowledgePoint, KnowledgePointInput, Example } from '@/api/knowledge';
+import { CATEGORY_OPTIONS } from '@/constants/categories';
 
 export default function CreateKnowledgePointPage() {
   const router = useRouter();
@@ -27,7 +28,7 @@ export default function CreateKnowledgePointPage() {
   const [form, setForm] = useState<KnowledgePointInput>({
     title: '',
     description: '',
-    category: 'sequence',
+    category: 'general',
     examples: [],
     tags: []
   });
@@ -138,10 +139,8 @@ export default function CreateKnowledgePointPage() {
                   label="分类"
                   placeholder="选择分类"
                   value={form.category}
-                  onChange={(value) => setForm({ ...form, category: value || 'sequence' })}
-                  data={[
-                    { value: 'sequence', label: '数列' },
-                  ]}
+                  onChange={(value) => setForm({ ...form, category: value || 'general' })}
+                  data={CATEGORY_OPTIONS}
                   size="sm"
                 />
                 
