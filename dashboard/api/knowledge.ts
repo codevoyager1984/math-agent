@@ -115,3 +115,50 @@ export const clearKnowledgeBase = async (): Promise<void> => {
     method: 'POST',
   });
 };
+
+// 文档处理相关接口
+export interface DocumentParseResponse {
+  filename: string;
+  extracted_text: string;
+  knowledge_points: KnowledgePointInput[];
+  total_points: number;
+}
+
+export interface BatchKnowledgePointsResponse {
+  success_count: number;
+  failed_count: number;
+  total_count: number;
+  success_ids: string[];
+  errors: string[];
+}
+
+// 解析文档生成知识点预览
+export const parseDocument = async (
+  file: File, 
+  maxKnowledgePoints: number = 10
+): Promise<DocumentParseResponse> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  return await request<DocumentParseResponse>({
+    url: `/embedding/parse-document?max_knowledge_points=${maxKnowledgePoints}`,
+    method: 'POST',
+    data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+};
+
+// 批量添加知识点
+export const batchAddKnowledgePoints = async (
+  knowledgePoints: KnowledgePointInput[]
+): Promise<BatchKnowledgePointsResponse> => {
+  return await request<BatchKnowledgePointsResponse>({
+    url: '/embedding/batch-knowledge-points',
+    method: 'POST',
+    data: {
+      knowledge_points: knowledgePoints
+    },
+  });
+};

@@ -1,7 +1,6 @@
 """
 FastAPI RAG 服务主应用
 """
-import logging
 import uvicorn
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
@@ -13,19 +12,7 @@ from api import router
 from schemas.common import ErrorResponse
 from services.rag_service import rag_service
 from config import settings
-
-
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('rag_server.log')
-    ]
-)
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 @asynccontextmanager

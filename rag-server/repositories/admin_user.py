@@ -4,14 +4,12 @@
 """
 import hashlib
 from typing import Optional, List
-from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
-import logging
 
 from models.base import get_db_session
 from models.admin_user import AdminUser as AdminUserModel
+from loguru import logger
 
-logger = logging.getLogger(__name__)
 
 
 class AdminUserRepository:

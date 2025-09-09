@@ -5,19 +5,22 @@ from datetime import datetime
 import json
 import traceback
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, status, Query
+from fastapi import APIRouter, HTTPException, status, Query, File, UploadFile
 from fastapi.responses import JSONResponse
 import logging
 
 from schemas.embeddings import (
     DocumentsAddRequest, ExampleInput, KnowledgePointAddRequest, QueryRequest, QueryResponse, 
     CollectionInfo, KnowledgePointInput, KnowledgePointResponse, 
-    KnowledgePointsResponse
+    KnowledgePointsResponse, DocumentParseRequest, DocumentParseResponse,
+    BatchKnowledgePointsRequest, BatchKnowledgePointsResponse
 )
 from schemas.common import HealthCheck, ErrorResponse
 from services.rag_service import rag_service
-
-logger = logging.getLogger(__name__)
+# 文档处理相关接口
+from services.document_processor import document_processor
+from services.ai_service import get_ai_service
+from loguru import logger
 
 # 创建路由器
 router = APIRouter()
@@ -510,5 +513,263 @@ async def delete_knowledge_point(knowledge_id: str):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"删除知识点失败: {str(e)}"
+        )
+
+
+@router.post(
+    "/parse-document",
+    response_model=DocumentParseResponse,
+    summary="解析文档生成知识点",
+    description="上传文档并解析生成知识点预览"
+)
+async def parse_document(
+    file: UploadFile = File(...),
+    max_knowledge_points: int = Query(10, ge=1, le=20, description="最大知识点数量")
+):
+    """
+    解析文档生成知识点预览
+    
+    - **file**: 上传的文档文件（支持 PDF, DOCX, TXT, MD 格式）
+    - **max_knowledge_points**: 最大生成知识点数量
+    """
+    # Generate request ID for tracking the entire flow
+    import uuid
+    import time
+    
+    request_id = str(uuid.uuid4())[:8]
+    start_time = time.time()
+    
+    logger.info(f"[{request_id}] Document parsing request started")
+    logger.info(f"[{request_id}] File: {file.filename}, Content-Type: {file.content_type}")
+    logger.info(f"[{request_id}] Max knowledge points: {max_knowledge_points}")
+    
+    try:
+        # 检查文件类型
+        logger.debug(f"[{request_id}] Validating file format")
+        if not document_processor.is_supported_file(file.filename):
+            logger.warning(f"[{request_id}] Unsupported file format: {file.filename}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"不支持的文件格式。支持的格式：{', '.join(document_processor.SUPPORTED_EXTENSIONS.keys())}"
+            )
+        
+        file_type = document_processor.get_file_type(file.filename)
+        logger.info(f"[{request_id}] File format validated: {file_type}")
+        
+        # 检查文件大小（限制为 10MB）
+        logger.debug(f"[{request_id}] Reading file content")
+        max_file_size = 10 * 1024 * 1024  # 10MB
+        file_read_start = time.time()
+        file_content = await file.read()
+        file_read_time = time.time() - file_read_start
+        
+        file_size_mb = len(file_content) / 1024 / 1024
+        logger.info(f"[{request_id}] File read completed in {file_read_time:.3f}s")
+        logger.info(f"[{request_id}] File size: {file_size_mb:.2f}MB ({len(file_content)} bytes)")
+        
+        if len(file_content) > max_file_size:
+            logger.warning(f"[{request_id}] File too large: {file_size_mb:.2f}MB > 10MB")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="文件大小超过限制（最大 10MB）"
+            )
+        
+        # 提取文档文本
+        logger.info(f"[{request_id}] Starting text extraction from document")
+        text_extract_start = time.time()
+        extracted_text = await document_processor.process_file_content(file_content, file.filename)
+        text_extract_time = time.time() - text_extract_start
+        
+        logger.info(f"[{request_id}] Text extraction completed in {text_extract_time:.3f}s")
+        logger.info(f"[{request_id}] Extracted text length: {len(extracted_text)} characters")
+        
+        if not extracted_text.strip():
+            logger.error(f"[{request_id}] No valid text content extracted from document")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="无法从文档中提取有效文本内容"
+            )
+        
+        # 使用 AI 生成知识点
+        logger.info(f"[{request_id}] Starting AI knowledge point generation")
+        ai_start = time.time()
+        ai_service = get_ai_service()
+        knowledge_points_data = await ai_service.generate_knowledge_points(
+            extracted_text, 
+            max_points=max_knowledge_points
+        )
+        ai_time = time.time() - ai_start
+        logger.info(f"[{request_id}] AI processing completed in {ai_time:.3f}s")
+        
+        # 转换为响应格式
+        logger.debug(f"[{request_id}] Converting to response format")
+        conversion_start = time.time()
+        knowledge_points = []
+        
+        for i, kp_data in enumerate(knowledge_points_data):
+            logger.debug(f"[{request_id}] Converting knowledge point {i+1}/{len(knowledge_points_data)}")
+            
+            examples = [
+                {
+                    "question": ex.question,
+                    "solution": ex.solution,
+                    "difficulty": ex.difficulty
+                } 
+                for ex in kp_data.examples
+            ]
+            
+            kp_input = KnowledgePointInput(
+                title=kp_data.title,
+                description=kp_data.description,
+                category=kp_data.category,
+                examples=examples,
+                tags=kp_data.tags
+            )
+            knowledge_points.append(kp_input)
+        
+        conversion_time = time.time() - conversion_start
+        logger.debug(f"[{request_id}] Response conversion completed in {conversion_time:.3f}s")
+        
+        # 准备响应
+        response_text_preview = extracted_text[:2000] + ("..." if len(extracted_text) > 2000 else "")
+        
+        total_time = time.time() - start_time
+        logger.info(f"[{request_id}] Document parsing completed successfully")
+        logger.info(f"[{request_id}] Total processing time: {total_time:.3f}s")
+        logger.info(f"[{request_id}] Timing breakdown - File read: {file_read_time:.3f}s, Text extraction: {text_extract_time:.3f}s, AI processing: {ai_time:.3f}s, Conversion: {conversion_time:.3f}s")
+        logger.info(f"[{request_id}] Final result: {len(knowledge_points)} knowledge points generated")
+        
+        # Log summary statistics
+        total_examples = sum(len(kp.examples) for kp in knowledge_points)
+        categories = [kp.category for kp in knowledge_points if kp.category]
+        unique_categories = set(categories) if categories else set()
+        total_tags = sum(len(kp.tags or []) for kp in knowledge_points)
+        
+        logger.info(f"[{request_id}] Content statistics - Total examples: {total_examples}, "
+                   f"Categories: {len(unique_categories)}, Total tags: {total_tags}")
+        
+        return DocumentParseResponse(
+            filename=file.filename,
+            extracted_text=response_text_preview,
+            knowledge_points=knowledge_points,
+            total_points=len(knowledge_points)
+        )
+        
+    except HTTPException as he:
+        total_time = time.time() - start_time
+        logger.warning(f"[{request_id}] HTTP exception after {total_time:.3f}s: {he.detail}")
+        raise
+    except Exception as e:
+        total_time = time.time() - start_time
+        logger.error(f"[{request_id}] Document parsing failed after {total_time:.3f}s: {str(e)}")
+        logger.error(f"[{request_id}] Exception type: {type(e).__name__}")
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"解析文档失败: {str(e)}"
+        )
+
+
+@router.post(
+    "/batch-knowledge-points",
+    response_model=BatchKnowledgePointsResponse,
+    summary="批量添加知识点",
+    description="批量添加多个知识点到知识库"
+)
+async def batch_add_knowledge_points(request: BatchKnowledgePointsRequest):
+    """
+    批量添加知识点
+    
+    - **knowledge_points**: 知识点列表
+    """
+    try:
+        success_ids = []
+        errors = []
+        
+        for i, knowledge_point in enumerate(request.knowledge_points):
+            try:
+                import uuid
+                from datetime import datetime
+                from schemas.embeddings import DocumentInput
+                
+                # 生成知识点ID
+                knowledge_id = str(uuid.uuid4())
+                
+                # 准备文档内容 - 主要用于向量搜索
+                content_parts = [
+                    f"知识点: {knowledge_point.title}",
+                    f"描述: {knowledge_point.description}",
+                    f"分类: {knowledge_point.category or 'general'}"
+                ]
+                
+                # 添加例题到内容中用于向量搜索
+                for j, example in enumerate(knowledge_point.examples, 1):
+                    content_parts.extend([
+                        f"例题{j}: {example.question}",
+                        f"解答步骤: {example.solution}"
+                    ])
+                
+                if knowledge_point.tags:
+                    content_parts.append(f"标签: {', '.join(knowledge_point.tags)}")
+                
+                document_content = "\n".join(content_parts)
+                
+                # 准备元数据
+                examples_data = [
+                    {
+                        "question": ex.question,
+                        "solution": ex.solution,
+                        "difficulty": ex.difficulty
+                    } for ex in knowledge_point.examples
+                ]
+                
+                current_time = datetime.now().isoformat()
+                metadata = {
+                    "type": "knowledge_point",
+                    "title": knowledge_point.title,
+                    "description": knowledge_point.description,
+                    "category": knowledge_point.category or "general",
+                    "tags": json.dumps(knowledge_point.tags or [], ensure_ascii=False),
+                    "examples": json.dumps(examples_data, ensure_ascii=False),
+                    "examples_count": len(knowledge_point.examples),
+                    "created_at": current_time,
+                    "updated_at": current_time
+                }
+                
+                # 创建文档
+                document = DocumentInput(
+                    id=knowledge_id,
+                    content=document_content,
+                    metadata=metadata
+                )
+                
+                # 添加到向量数据库
+                success = await rag_service.add_documents(
+                    documents=[document],
+                    collection_name="math_knowledge"
+                )
+                
+                if success:
+                    success_ids.append(knowledge_id)
+                else:
+                    errors.append(f"知识点 {i+1} ({knowledge_point.title}): 添加到向量数据库失败")
+                    
+            except Exception as e:
+                logger.error(f"批量添加知识点 {i+1} 失败: {e}")
+                errors.append(f"知识点 {i+1} ({knowledge_point.title}): {str(e)}")
+        
+        return BatchKnowledgePointsResponse(
+            success_count=len(success_ids),
+            failed_count=len(errors),
+            total_count=len(request.knowledge_points),
+            success_ids=success_ids,
+            errors=errors
+        )
+        
+    except Exception as e:
+        logger.error(f"批量添加知识点接口错误: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"批量添加知识点失败: {str(e)}"
         )
 

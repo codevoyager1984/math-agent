@@ -35,6 +35,9 @@ class Settings:
     # CORS 配置
     CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "*")
 
+    # AI 服务配置
+    DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "")
+
     DATABASE_URL: str = os.getenv("DATABASE_URL")
     
     @property

@@ -4,13 +4,10 @@
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
-import logging
 
 from schemas.auth import AdminUser, AdminLoginResponse
 from repositories.admin_user import AdminUserRepository
-
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 class AuthService:

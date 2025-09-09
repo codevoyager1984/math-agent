@@ -83,3 +83,32 @@ class KnowledgePointsResponse(BaseModel):
     total: int = Field(..., description="总数量")
     page: int = Field(..., description="当前页码")
     limit: int = Field(..., description="每页数量")
+
+
+# 文档上传和处理相关模型
+class DocumentParseRequest(BaseModel):
+    """文档解析请求"""
+    filename: str = Field(..., description="文件名")
+    max_knowledge_points: int = Field(default=10, ge=1, le=20, description="最大知识点数量")
+
+
+class DocumentParseResponse(BaseModel):
+    """文档解析响应"""
+    filename: str = Field(..., description="文件名")
+    extracted_text: str = Field(..., description="提取的文本内容")
+    knowledge_points: List[KnowledgePointInput] = Field(..., description="生成的知识点列表")
+    total_points: int = Field(..., description="知识点总数")
+
+
+class BatchKnowledgePointsRequest(BaseModel):
+    """批量添加知识点请求"""
+    knowledge_points: List[KnowledgePointInput] = Field(..., description="知识点列表")
+
+
+class BatchKnowledgePointsResponse(BaseModel):
+    """批量添加知识点响应"""
+    success_count: int = Field(..., description="成功添加的数量")
+    failed_count: int = Field(..., description="失败的数量")
+    total_count: int = Field(..., description="总数量")
+    success_ids: List[str] = Field(..., description="成功添加的知识点ID列表")
+    errors: List[str] = Field(default=[], description="错误信息列表")

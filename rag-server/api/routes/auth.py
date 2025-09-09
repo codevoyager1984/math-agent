@@ -3,7 +3,6 @@
 """
 from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-import logging
 
 from schemas.auth import (
     AdminLoginRequest, AdminLoginResponse, 
@@ -11,8 +10,7 @@ from schemas.auth import (
 )
 from schemas.common import SuccessResponse, ErrorResponse
 from services.auth_service import auth_service
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 # 创建路由器
 router = APIRouter()

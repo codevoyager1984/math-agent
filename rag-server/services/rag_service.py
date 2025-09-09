@@ -2,15 +2,12 @@
 RAG 主服务模块
 整合嵌入向量服务和 ChromaDB 服务，提供高层次的 RAG 功能
 """
-from typing import List, Optional, Dict, Any
-import logging
+from typing import List, Dict, Any
 
 from .embedding_service import embedding_service
 from .chroma_service import chroma_service
 from schemas.embeddings import DocumentInput, DocumentResult, QueryResponse
-
-logger = logging.getLogger(__name__)
-
+from loguru import logger
 
 class RAGService:
     """RAG 主服务类"""

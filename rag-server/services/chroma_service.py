@@ -3,12 +3,10 @@ ChromaDB 服务模块
 负责向量数据库的操作
 """
 import asyncio
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional, Dict, Any
 import chromadb
 from chromadb.api.models.AsyncCollection import AsyncCollection
-import logging
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 class ChromaDBService:

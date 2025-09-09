@@ -5,10 +5,7 @@
 import asyncio
 from typing import List, Union
 from sentence_transformers import SentenceTransformer
-import logging
-
-logger = logging.getLogger(__name__)
-
+from loguru import logger
 
 class EmbeddingService:
     """嵌入向量服务"""

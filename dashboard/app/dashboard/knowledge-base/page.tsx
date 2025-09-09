@@ -15,6 +15,7 @@ import {
   IconRefresh, 
   IconTrash,
   IconPlus,
+  IconFileUpload,
 } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import { useDisclosure } from '@mantine/hooks';
@@ -25,6 +26,7 @@ import KnowledgePointCard from '@/components/knowledge-base/KnowledgePointCard';
 import KnowledgePointDetailModal from '@/components/knowledge-base/KnowledgePointDetailModal';
 import SearchFilters from '@/components/knowledge-base/SearchFilters';
 import KnowledgeBaseStats from '@/components/knowledge-base/KnowledgeBaseStats';
+import DocumentUploadModal from '@/components/knowledge-base/DocumentUploadModal';
 import { 
   getKnowledgePoints, 
   deleteKnowledgePoint,
@@ -50,6 +52,7 @@ export default function KnowledgeBasePage() {
 
   // Modal states
   const [detailOpened, { open: openDetail, close: closeDetail }] = useDisclosure(false);
+  const [uploadOpened, { open: openUpload, close: closeUpload }] = useDisclosure(false);
 
   // 获取知识点列表
   const fetchKnowledgePoints = useCallback(async () => {
@@ -181,7 +184,12 @@ export default function KnowledgeBasePage() {
     });
   };
 
-
+  // 文档上传成功处理
+  const handleUploadSuccess = () => {
+    fetchKnowledgePoints(); // 刷新列表
+    fetchCollectionInfo(); // 刷新集合信息
+    closeUpload();
+  };
 
   return (
     <Container fluid>
@@ -214,6 +222,14 @@ export default function KnowledgeBasePage() {
               onClick={handleCreate}
             >
               创建知识点
+            </Button>
+            <Button 
+              leftSection={<IconFileUpload size={16} />}
+              onClick={openUpload}
+              variant="gradient"
+              gradient={{ from: 'blue', to: 'cyan', deg: 90 }}
+            >
+              上传文档
             </Button>
             <Button 
               variant="light"
@@ -276,6 +292,13 @@ export default function KnowledgeBasePage() {
           opened={detailOpened}
           onClose={closeDetail}
           knowledgePoint={selectedKnowledge}
+        />
+
+        {/* 文档上传弹窗 */}
+        <DocumentUploadModal
+          opened={uploadOpened}
+          onClose={closeUpload}
+          onSuccess={handleUploadSuccess}
         />
       </Stack>
     </Container>
