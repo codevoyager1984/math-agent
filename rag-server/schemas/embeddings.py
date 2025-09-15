@@ -18,10 +18,17 @@ class DocumentsAddRequest(BaseModel):
     documents: List[DocumentInput] = Field(..., description="文档列表")
 
 class QueryRequest(BaseModel):
-    """查询请求模型"""
+    """查询请求模型 - 支持混合搜索"""
     query: str = Field(..., description="查询文本")
     n_results: int = Field(default=5, ge=1, le=20, description="返回结果数量")
     include_metadata: bool = Field(default=True, description="是否包含元数据")
+
+    # 混合搜索参数（可选，保持向后兼容）
+    search_mode: str = Field(default="hybrid", description="搜索模式: vector, text, hybrid")
+    vector_weight: float = Field(default=0.6, ge=0.0, le=1.0, description="向量搜索权重")
+    text_weight: float = Field(default=0.4, ge=0.0, le=1.0, description="文本搜索权重")
+    enable_rerank: bool = Field(default=True, description="是否启用重排序")
+    rerank_top_k: Optional[int] = Field(default=None, description="重排序后返回的top结果数量")
 
 
 class HybridQueryRequest(BaseModel):
@@ -37,11 +44,19 @@ class HybridQueryRequest(BaseModel):
 
 
 class DocumentResult(BaseModel):
-    """文档查询结果"""
+    """文档查询结果 - 支持混合搜索评分"""
     id: str = Field(..., description="文档ID")
     content: str = Field(..., description="文档内容")
     distance: float = Field(..., description="距离分数")
     metadata: Optional[Dict[str, Any]] = Field(default=None, description="文档元数据")
+
+    # 混合搜索评分信息（可选）
+    vector_score: Optional[float] = Field(default=None, description="向量相似度分数")
+    text_score: Optional[float] = Field(default=None, description="文本匹配分数")
+    fusion_score: Optional[float] = Field(default=None, description="融合分数")
+    rerank_score: Optional[float] = Field(default=None, description="重排序分数")
+    final_score: Optional[float] = Field(default=None, description="最终分数")
+    highlight: Optional[Dict[str, Any]] = Field(default=None, description="高亮信息")
 
 
 class RankedDocumentResult(BaseModel):
@@ -68,10 +83,15 @@ class RankedDocumentResult(BaseModel):
 
 
 class QueryResponse(BaseModel):
-    """查询响应模型"""
+    """查询响应模型 - 支持混合搜索结果"""
     results: List[DocumentResult] = Field(..., description="查询结果列表")
     query: str = Field(..., description="原始查询")
     total_results: int = Field(..., description="总结果数")
+
+    # 混合搜索元信息（可选）
+    search_mode: Optional[str] = Field(default=None, description="实际使用的搜索模式")
+    timing: Optional[Dict[str, float]] = Field(default=None, description="各阶段用时统计")
+    search_stats: Optional[Dict[str, Any]] = Field(default=None, description="搜索统计信息")
 
 
 class HybridQueryResponse(BaseModel):

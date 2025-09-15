@@ -11,7 +11,7 @@ from .chroma_service import chroma_service
 from .elasticsearch_service import elasticsearch_service
 from .rerank_service import rerank_service
 from schemas.embeddings import (
-    DocumentInput, DocumentResult, QueryResponse,
+    DocumentInput, DocumentResult, QueryResponse, QueryRequest,
     HybridQueryRequest, HybridQueryResponse, RankedDocumentResult
 )
 from loguru import logger
@@ -361,6 +361,116 @@ class RAGService:
         except Exception as e:
             timing["total"] = time.time() - start_time
             logger.error(f"[{request_id}] Hybrid search failed after {timing['total']:.3f}s: {e}")
+            raise
+
+    async def smart_query_documents(
+        self,
+        request: QueryRequest,
+        request_id: Optional[str] = None
+    ) -> QueryResponse:
+        """
+        智能查询文档 - 根据请求参数自动选择搜索策略
+
+        Args:
+            request: 查询请求（支持混合搜索参数）
+            request_id: 请求ID用于追踪
+
+        Returns:
+            查询响应（包含混合搜索结果信息）
+        """
+        if not request_id:
+            request_id = str(uuid.uuid4())[:8]
+
+        start_time = time.time()
+        logger.info(f"[{request_id}] Smart query: '{request.query[:50]}...', mode: {request.search_mode}")
+
+        try:
+            # 根据搜索模式选择策略
+            if request.search_mode == "vector":
+                # 纯向量搜索 - 使用原有逻辑保持向后兼容
+                response = await self.query_documents(
+                    query=request.query,
+                    n_results=request.n_results,
+                    include_metadata=request.include_metadata
+                )
+
+                # 转换为增强格式
+                enhanced_results = []
+                for result in response.results:
+                    enhanced_result = DocumentResult(
+                        id=result.id,
+                        content=result.content,
+                        distance=result.distance,
+                        metadata=result.metadata,
+                        vector_score=1.0 - result.distance if result.distance <= 1.0 else 0.0,
+                        final_score=1.0 - result.distance if result.distance <= 1.0 else 0.0
+                    )
+                    enhanced_results.append(enhanced_result)
+
+                return QueryResponse(
+                    results=enhanced_results,
+                    query=request.query,
+                    total_results=len(enhanced_results),
+                    search_mode="vector",
+                    timing={"total": time.time() - start_time},
+                    search_stats={"search_mode": "vector", "results_count": len(enhanced_results)}
+                )
+
+            else:
+                # 文本搜索或混合搜索 - 使用混合搜索逻辑
+                hybrid_request = HybridQueryRequest(
+                    query=request.query,
+                    n_results=request.n_results,
+                    include_metadata=request.include_metadata,
+                    search_mode=request.search_mode,
+                    vector_weight=request.vector_weight,
+                    text_weight=request.text_weight,
+                    enable_rerank=request.enable_rerank,
+                    rerank_top_k=request.rerank_top_k
+                )
+
+                hybrid_response = await self.hybrid_query_documents(
+                    request=hybrid_request,
+                    request_id=request_id
+                )
+
+                # 转换为标准格式
+                standard_results = []
+                for ranked_result in hybrid_response.results:
+                    standard_result = DocumentResult(
+                        id=ranked_result.id,
+                        content="",  # 混合搜索不返回完整内容
+                        distance=1.0 - (ranked_result.final_score or 0.0),  # 转换分数为距离
+                        metadata={
+                            "title": ranked_result.title,
+                            "description": ranked_result.description,
+                            "category": ranked_result.category,
+                            "examples": ranked_result.examples,
+                            "tags": ranked_result.tags,
+                            "created_at": ranked_result.created_at,
+                            "updated_at": ranked_result.updated_at
+                        } if ranked_result.title else None,
+                        vector_score=ranked_result.vector_score,
+                        text_score=ranked_result.text_score,
+                        fusion_score=ranked_result.fusion_score,
+                        rerank_score=ranked_result.rerank_score,
+                        final_score=ranked_result.final_score,
+                        highlight=ranked_result.highlight
+                    )
+                    standard_results.append(standard_result)
+
+                return QueryResponse(
+                    results=standard_results,
+                    query=request.query,
+                    total_results=len(standard_results),
+                    search_mode=hybrid_response.search_mode,
+                    timing=hybrid_response.timing,
+                    search_stats=hybrid_response.search_stats
+                )
+
+        except Exception as e:
+            total_time = time.time() - start_time
+            logger.error(f"[{request_id}] Smart query failed after {total_time:.3f}s: {e}")
             raise
 
     def _parse_json_field(self, json_str: str) -> Any:

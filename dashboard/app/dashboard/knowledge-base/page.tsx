@@ -27,15 +27,23 @@ import KnowledgePointDetailModal from '@/components/knowledge-base/KnowledgePoin
 import SearchFilters from '@/components/knowledge-base/SearchFilters';
 import KnowledgeBaseStats from '@/components/knowledge-base/KnowledgeBaseStats';
 import DocumentUploadModal from '@/components/knowledge-base/DocumentUploadModal';
-import { 
-  getKnowledgePoints, 
+import {
+  getKnowledgePoints,
   deleteKnowledgePoint,
   getCollectionInfo,
   clearKnowledgeBase,
-  KnowledgePoint, 
+  queryDocuments,
+  KnowledgePoint,
   KnowledgePointListParams,
+  QueryParams,
 } from '@/api/knowledge';
 import { PATH_KNOWLEDGE_BASE } from '@/routes';
+import {
+  loadSearchConfig,
+  saveSearchConfig,
+  resetSearchConfig,
+  type SearchConfig
+} from '@/utils/searchConfig';
 
 const RECORDS_PER_PAGE = 12;
 
@@ -50,37 +58,105 @@ export default function KnowledgeBasePage() {
   const [selectedKnowledge, setSelectedKnowledge] = useState<KnowledgePoint | null>(null);
   const [collectionInfo, setCollectionInfo] = useState<any>(null);
 
+  // 混合搜索状态 - 从 localStorage 初始化
+  const [searchMode, setSearchMode] = useState<'vector' | 'text' | 'hybrid'>('hybrid');
+  const [vectorWeight, setVectorWeight] = useState(0.6);
+  const [textWeight, setTextWeight] = useState(0.4);
+  const [enableRerank, setEnableRerank] = useState(true);
+  const [rerankTopK, setRerankTopK] = useState<number | undefined>(undefined);
+  const [isConfigLoaded, setIsConfigLoaded] = useState(false);
+
   // Modal states
   const [detailOpened, { open: openDetail, close: closeDetail }] = useDisclosure(false);
   const [uploadOpened, { open: openUpload, close: closeUpload }] = useDisclosure(false);
+
+  // 初始化时从 localStorage 加载配置
+  useEffect(() => {
+    const savedConfig = loadSearchConfig();
+    setSearchMode(savedConfig.searchMode);
+    setVectorWeight(savedConfig.vectorWeight);
+    setTextWeight(savedConfig.textWeight);
+    setEnableRerank(savedConfig.enableRerank);
+    setRerankTopK(savedConfig.rerankTopK);
+    setIsConfigLoaded(true);
+  }, []);
+
+  // 配置变化时自动保存到 localStorage
+  useEffect(() => {
+    if (isConfigLoaded) {
+      const config: SearchConfig = {
+        searchMode,
+        vectorWeight,
+        textWeight,
+        enableRerank,
+        rerankTopK,
+      };
+      saveSearchConfig(config);
+    }
+  }, [searchMode, vectorWeight, textWeight, enableRerank, rerankTopK, isConfigLoaded]);
 
   // 获取知识点列表
   const fetchKnowledgePoints = useCallback(async () => {
     try {
       setLoading(true);
-      const params: KnowledgePointListParams = {
-        page,
-        limit: RECORDS_PER_PAGE,
-      };
 
+      // 如果有搜索关键词，使用智能搜索
       if (search.trim()) {
-        params.search = search.trim();
-      }
+        const queryParams: QueryParams = {
+          query: search.trim(),
+          n_results: RECORDS_PER_PAGE,
+          search_mode: searchMode,
+          vector_weight: vectorWeight,
+          text_weight: textWeight,
+          enable_rerank: enableRerank,
+          rerank_top_k: rerankTopK,
+        };
 
-      if (categoryFilter !== 'all') {
-        params.category = categoryFilter;
-      }
+        const response = await queryDocuments(queryParams);
 
-      const response = await getKnowledgePoints(params);
-      setKnowledgePoints(response.knowledge_points);
-      setTotalRecords(response.total);
+        // 转换查询结果为知识点格式
+        const knowledgePointResults = response.results.map((result) => {
+          const metadata = result.metadata || {};
+          return {
+            id: result.id,
+            title: metadata.title || '',
+            description: metadata.description || '',
+            category: metadata.category || 'general',
+            examples: metadata.examples || [],
+            tags: metadata.tags || [],
+            created_at: metadata.created_at,
+            updated_at: metadata.updated_at,
+            similarity_score: result.final_score || result.vector_score || (1 - result.distance),
+          } as KnowledgePoint;
+        }).filter(kp => {
+          // 应用分类过滤
+          return categoryFilter === 'all' || kp.category === categoryFilter;
+        });
+
+        setKnowledgePoints(knowledgePointResults);
+        setTotalRecords(knowledgePointResults.length);
+      } else {
+        // 没有搜索关键词，使用传统的分页获取
+        const params: KnowledgePointListParams = {
+          page,
+          limit: RECORDS_PER_PAGE,
+        };
+
+        if (categoryFilter !== 'all') {
+          params.category = categoryFilter;
+        }
+
+        const response = await getKnowledgePoints(params);
+        setKnowledgePoints(response.knowledge_points);
+        setTotalRecords(response.total);
+      }
     } catch (error) {
       console.error('获取知识点列表失败:', error);
       toast.error('获取知识点列表失败');
     } finally {
       setLoading(false);
     }
-  }, [page, search, categoryFilter]);
+  }, [page, search, categoryFilter, searchMode, vectorWeight, textWeight, enableRerank, rerankTopK]);
 
   // 获取集合信息
   const fetchCollectionInfo = useCallback(async () => {
@@ -111,6 +187,16 @@ export default function KnowledgeBasePage() {
     setSearch('');
     setCategoryFilter('all');
     setPage(1);
+  };
+
+  // 重置配置到默认值
+  const handleResetConfig = () => {
+    const defaultConfig = resetSearchConfig();
+    setSearchMode(defaultConfig.searchMode);
+    setVectorWeight(defaultConfig.vectorWeight);
+    setTextWeight(defaultConfig.textWeight);
+    setEnableRerank(defaultConfig.enableRerank);
+    setRerankTopK(defaultConfig.rerankTopK);
   };
 
   // 查看知识点详情
@@ -203,10 +289,21 @@ export default function KnowledgeBasePage() {
         <SearchFilters
           search={search}
           categoryFilter={categoryFilter}
+          searchMode={searchMode}
+          vectorWeight={vectorWeight}
+          textWeight={textWeight}
+          enableRerank={enableRerank}
+          rerankTopK={rerankTopK}
           onSearchChange={setSearch}
           onCategoryChange={setCategoryFilter}
+          onSearchModeChange={setSearchMode}
+          onVectorWeightChange={setVectorWeight}
+          onTextWeightChange={setTextWeight}
+          onEnableRerankChange={setEnableRerank}
+          onRerankTopKChange={setRerankTopK}
           onSearch={handleSearch}
           onReset={handleReset}
+          onResetConfig={handleResetConfig}
         />
 
         {/* 操作栏 */}

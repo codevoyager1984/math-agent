@@ -13,8 +13,7 @@ from schemas.embeddings import (
     DocumentsAddRequest, ExampleInput, KnowledgePointAddRequest, QueryRequest, QueryResponse,
     CollectionInfo, AddDocumentInput, KnowledgePointResponse,
     KnowledgePointsResponse, DocumentParseRequest, DocumentParseResponse,
-    BatchKnowledgePointsRequest, BatchKnowledgePointsResponse,
-    HybridQueryRequest, HybridQueryResponse
+    BatchKnowledgePointsRequest, BatchKnowledgePointsResponse
 )
 from schemas.common import HealthCheck, ErrorResponse
 from services.rag_service import rag_service
@@ -134,75 +133,44 @@ async def add_document(request: AddDocumentInput):
 @router.post(
     "/query",
     response_model=QueryResponse,
-    summary="查询文档",
-    description="根据查询文本检索相关文档"
+    summary="智能查询文档",
+    description="支持向量搜索、文本搜索、混合搜索和重排序的智能查询"
 )
 async def query_documents(request: QueryRequest):
     """
-    查询相关文档
-    
-    - **query**: 查询文本
-    - **n_results**: 返回结果数量，默认为 5，范围 1-20
-    - **include_metadata**: 是否包含元数据，默认为 True
-    """
-    try:
-        response = await rag_service.query_documents(
-            query=request.query,
-            n_results=request.n_results,
-            include_metadata=request.include_metadata
-        )
-        
-        return response
-        
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"查询文档失败: {str(e)}"
-        )
-
-
-@router.post(
-    "/hybrid-query",
-    response_model=HybridQueryResponse,
-    summary="混合搜索文档",
-    description="结合向量搜索、全文搜索和重排序的高级查询"
-)
-async def hybrid_query_documents(request: HybridQueryRequest):
-    """
-    混合搜索文档
+    智能查询相关文档
 
     - **query**: 查询文本
     - **n_results**: 返回结果数量，默认为 5，范围 1-20
     - **include_metadata**: 是否包含元数据，默认为 True
-    - **search_mode**: 搜索模式 (vector/text/hybrid)
-    - **vector_weight**: 向量搜索权重
-    - **text_weight**: 文本搜索权重
-    - **enable_rerank**: 是否启用重排序
+    - **search_mode**: 搜索模式 (vector/text/hybrid)，默认为 vector
+    - **vector_weight**: 向量搜索权重，默认为 0.6
+    - **text_weight**: 文本搜索权重，默认为 0.4
+    - **enable_rerank**: 是否启用重排序，默认为 False
     - **rerank_top_k**: 重排序后返回的top结果数量
     """
     # 生成请求ID用于追踪
     request_id = str(uuid.uuid4())[:8]
 
     try:
-        logger.info(f"[{request_id}] Hybrid query request: '{request.query[:50]}...'")
-        logger.info(f"[{request_id}] Search mode: {request.search_mode}, n_results: {request.n_results}")
+        logger.info(f"[{request_id}] Query request - mode: {request.search_mode}, query: '{request.query[:50]}...'")
 
-        response = await rag_service.hybrid_query_documents(
+        response = await rag_service.smart_query_documents(
             request=request,
             request_id=request_id
         )
 
-        logger.info(f"[{request_id}] Hybrid query completed successfully")
+        logger.info(f"[{request_id}] Query completed - {len(response.results)} results")
         return response
 
     except Exception as e:
-        logger.error(f"[{request_id}] Hybrid query failed: {e}")
+        logger.error(f"[{request_id}] Query failed: {e}")
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"混合搜索失败: {str(e)}"
+            detail=f"查询文档失败: {str(e)}"
         )
+
 
 
 @router.get(

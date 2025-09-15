@@ -84,16 +84,78 @@ export const deleteKnowledgePoint = async (id: string): Promise<void> => {
   });
 };
 
-// 查询文档（用于搜索知识点）
-export const queryDocuments = async (query: string, nResults: number = 5): Promise<any> => {
-  return await request<any>({
+// 混合搜索参数接口
+export interface QueryParams {
+  query: string;
+  n_results?: number;
+  include_metadata?: boolean;
+  search_mode?: 'vector' | 'text' | 'hybrid';
+  vector_weight?: number;
+  text_weight?: number;
+  enable_rerank?: boolean;
+  rerank_top_k?: number;
+}
+
+// 查询响应接口
+export interface QueryResult {
+  id: string;
+  content: string;
+  distance: number;
+  metadata?: Record<string, any>;
+  // 混合搜索评分信息
+  vector_score?: number;
+  text_score?: number;
+  fusion_score?: number;
+  rerank_score?: number;
+  final_score?: number;
+  highlight?: Record<string, any>;
+}
+
+export interface QueryResponse {
+  results: QueryResult[];
+  query: string;
+  total_results: number;
+  // 混合搜索元信息
+  search_mode?: string;
+  timing?: Record<string, number>;
+  search_stats?: Record<string, any>;
+}
+
+// 查询文档（支持混合搜索）
+export const queryDocuments = async (params: QueryParams): Promise<QueryResponse> => {
+  const {
+    query,
+    n_results = 5,
+    include_metadata = true,
+    search_mode = 'hybrid',
+    vector_weight = 0.6,
+    text_weight = 0.4,
+    enable_rerank = true,
+    rerank_top_k
+  } = params;
+
+  return await request<QueryResponse>({
     url: '/knowledge-base/query',
     method: 'POST',
     data: {
       query,
-      n_results: nResults,
-      include_metadata: true
+      n_results,
+      include_metadata,
+      search_mode,
+      vector_weight,
+      text_weight,
+      enable_rerank,
+      rerank_top_k
     },
+  });
+};
+
+// 向后兼容的简单查询函数
+export const simpleQueryDocuments = async (query: string, nResults: number = 5): Promise<QueryResponse> => {
+  return await queryDocuments({
+    query,
+    n_results: nResults,
+    search_mode: 'vector'
   });
 };
 
