@@ -29,10 +29,11 @@ export default withBundleAnalyzer({
     timeout: 600000, // 10分钟
   },
   async rewrites() {
+    const ragServerUrl = process.env.RAG_SERVER_URL || 'http://localhost:8000';
     return [
       {
         source: '/api/:path*',
-        destination: 'http://127.0.0.1:8000/api/:path*'
+        destination: `${ragServerUrl}/api/:path*`
       },
     ];
   },

@@ -37,6 +37,7 @@ import { toast } from 'sonner';
 import { DocumentInput } from '@/api/knowledge';
 import { useRouter } from 'next/navigation';
 import KnowledgePointPreview from './KnowledgePointPreview';
+import { API_ENDPOINTS } from '@/config/api';
 
 interface DocumentChatPageProps {
   sessionId: string;
@@ -192,7 +193,7 @@ export default function DocumentChatPage({
       console.log('JSON content length:', jsonContent.length);
       console.log('Session ID:', sessionId);
 
-      const response = await fetch(`http://localhost:8000/api/knowledge-base/parse-json`, {
+      const response = await fetch(API_ENDPOINTS.RAG.PARSE_JSON, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -403,7 +404,7 @@ export default function DocumentChatPage({
 
       // 使用统一的流式聊天接口
       const response = await fetch(
-        `http://localhost:8000/api/knowledge-base/chat-stream/${sessionId}`,
+        API_ENDPOINTS.RAG.CHAT_STREAM(sessionId),
         {
           method: 'POST',
           headers: {
