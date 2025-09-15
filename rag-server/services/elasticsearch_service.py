@@ -412,6 +412,57 @@ class ElasticsearchService:
             logger.error(f"Elasticsearch ping failed: {e}")
             return False
 
+    async def get_document_by_id(self, document_id: str) -> Optional[Dict[str, Any]]:
+        """
+        根据ID直接获取文档
+
+        Args:
+            document_id: 文档ID
+
+        Returns:
+            文档数据，如果不存在则返回 None
+        """
+        try:
+            es_client = self._get_es_client()
+
+            # 使用 get API 直接获取文档
+            response = await es_client.get(
+                index=self.index,
+                id=document_id
+            )
+
+            if response.get("found"):
+                source = response.get("_source", {})
+
+                # 转换为统一格式
+                document_data = {
+                    "id": document_id,
+                    "content": source.get("content", ""),
+                    "metadata": {
+                        "title": source.get("title", ""),
+                        "description": source.get("description", ""),
+                        "category": source.get("category", "general"),
+                        "tags": json.dumps(source.get("tags", []), ensure_ascii=False),
+                        "examples": json.dumps(source.get("examples", []), ensure_ascii=False),
+                        "examples_count": source.get("examples_count", 0),
+                        "created_at": source.get("created_at"),
+                        "updated_at": source.get("updated_at")
+                    }
+                }
+
+                logger.info(f"成功从 Elasticsearch 获取文档 {document_id}")
+                return document_data
+            else:
+                logger.info(f"文档 {document_id} 在 Elasticsearch 索引中不存在")
+                return None
+
+        except NotFoundError:
+            logger.info(f"文档 {document_id} 在 Elasticsearch 索引中不存在")
+            return None
+        except Exception as e:
+            logger.error(f"从 Elasticsearch 根据ID获取文档失败: {e}")
+            raise
+
     async def get_index_info(self) -> Dict[str, Any]:
         """
         获取索引信息

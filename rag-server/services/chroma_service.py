@@ -214,25 +214,71 @@ class ChromaDBService:
             logger.error(f"删除文档失败: {e}")
             raise
     
+    async def get_document_by_id(
+        self,
+        collection_name: str,
+        document_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        根据ID直接获取文档
+
+        Args:
+            collection_name: 集合名称
+            document_id: 文档ID
+
+        Returns:
+            文档数据，如果不存在则返回 None
+        """
+        try:
+            collection = await self.get_or_create_collection(collection_name)
+
+            # 使用 get 方法直接获取指定ID的文档
+            results = await collection.get(
+                ids=[document_id],
+                include=["documents", "metadatas"]
+            )
+
+            # 检查是否找到文档
+            if not results or not results.get('ids') or len(results['ids']) == 0:
+                logger.info(f"文档 {document_id} 在集合 {collection_name} 中不存在")
+                return None
+
+            # 提取文档数据
+            documents = results.get('documents', [])
+            metadatas = results.get('metadatas', [])
+
+            document_data = {
+                "id": document_id,
+                "content": documents[0] if documents else "",
+                "metadata": metadatas[0] if metadatas else {}
+            }
+
+            logger.info(f"成功获取文档 {document_id} 从集合 {collection_name}")
+            return document_data
+
+        except Exception as e:
+            logger.error(f"根据ID获取文档失败: {e}")
+            raise
+
     async def get_collection_info(self, collection_name: str) -> Dict[str, Any]:
         """
         获取集合信息
-        
+
         Args:
             collection_name: 集合名称
-            
+
         Returns:
             集合信息
         """
         try:
             collection = await self.get_or_create_collection(collection_name)
             count = await collection.count()
-            
+
             return {
                 "name": collection_name,
                 "count": count
             }
-            
+
         except Exception as e:
             logger.error(f"获取集合信息失败: {e}")
             raise

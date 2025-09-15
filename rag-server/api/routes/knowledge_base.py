@@ -330,38 +330,33 @@ async def clear_knowledge_base():
 async def get_knowledge_point(document_id: str):
     """
     获取知识点详情
-    
+
     - **knowledge_id**: 知识点ID
     """
     try:
-        # 通过ID查询知识点
-        result = await rag_service.query_documents(
-            query=document_id,  # 使用ID作为查询
-            n_results=1000,  # 获取更多结果
-            collection_name="math_knowledge"
+        # 直接通过ID获取文档
+        result = await rag_service.get_document_by_id(
+            document_id=document_id,
+            request_id=document_id[:8]  # 使用文档ID的前8位作为请求ID
         )
-        
-        if not result or not result.results or len(result.results) == 0:
+
+        if not result:
             raise HTTPException(status_code=404, detail="知识点不存在")
-        
-        # 查找匹配的ID
-        target_result = None
-        for doc_result in result.results:
-            if doc_result.id == document_id:
-                target_result = doc_result
-                break
-        
-        if target_result is None:
-            raise HTTPException(status_code=404, detail="知识点不存在")
-        
+
         # 获取知识点数据
-        metadata = target_result.metadata or {}
-        document = target_result.content
-        
+        metadata = result.metadata or {}
+
         # 反序列化JSON字段
-        tags = json.loads(metadata.get("tags", "[]"))
-        examples_data = json.loads(metadata.get("examples", "[]"))
-        
+        try:
+            tags = json.loads(metadata.get("tags", "[]"))
+        except (json.JSONDecodeError, TypeError):
+            tags = []
+
+        try:
+            examples_data = json.loads(metadata.get("examples", "[]"))
+        except (json.JSONDecodeError, TypeError):
+            examples_data = []
+
         return KnowledgePointResponse(
             id=document_id,
             title=metadata.get("title", ""),
@@ -372,7 +367,7 @@ async def get_knowledge_point(document_id: str):
             created_at=metadata.get("created_at"),
             updated_at=metadata.get("updated_at")
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -400,17 +395,14 @@ async def update_knowledge_point(document_id: str, request: KnowledgePointAddReq
         # 获取原有知识点的创建时间
         existing_created_at = None
         try:
-            # 查询现有知识点获取创建时间
-            existing_result = await rag_service.query_documents(
-                query=document_id,
-                n_results=1000,
+            # 直接通过ID获取现有知识点
+            existing_doc = await rag_service.get_document_by_id(
+                document_id=document_id,
+                request_id=document_id[:8]
             )
-            
-            # 查找匹配的ID
-            for doc_result in existing_result.results:
-                if doc_result.id == document_id and doc_result.metadata:
-                    existing_created_at = doc_result.metadata.get("created_at")
-                    break
+
+            if existing_doc and existing_doc.metadata:
+                existing_created_at = existing_doc.metadata.get("created_at")
         except Exception as e:
             logger.warning(f"无法获取原有创建时间: {e}")
             # 如果无法获取原有时间，使用当前时间作为创建时间

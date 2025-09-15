@@ -626,13 +626,74 @@ class RAGService:
             logger.error(f"[{request_id}] 删除文档失败: {e}")
             raise
     
+    async def get_document_by_id(
+        self,
+        document_id: str,
+        request_id: Optional[str] = None
+    ) -> Optional[DocumentResult]:
+        """
+        根据ID直接获取文档
+
+        Args:
+            document_id: 文档ID
+            request_id: 请求ID用于追踪
+
+        Returns:
+            文档结果，如果不存在则返回 None
+        """
+        if not request_id:
+            request_id = str(uuid.uuid4())[:8]
+
+        try:
+            logger.info(f"[{request_id}] 根据ID获取文档: {document_id}")
+
+            # 优先从 ChromaDB 获取（向量数据库更适合存储完整文档）
+            try:
+                chroma_doc = await self.chroma_service.get_document_by_id(
+                    collection_name=self.collection_name,
+                    document_id=document_id
+                )
+
+                if chroma_doc:
+                    logger.info(f"[{request_id}] 成功从 ChromaDB 获取文档 {document_id}")
+                    return DocumentResult(
+                        id=chroma_doc["id"],
+                        content=chroma_doc["content"],
+                        metadata=chroma_doc["metadata"]
+                    )
+
+            except Exception as e:
+                logger.warning(f"[{request_id}] 从 ChromaDB 获取文档失败，尝试 Elasticsearch: {e}")
+
+            # 如果 ChromaDB 失败，尝试从 Elasticsearch 获取
+            try:
+                es_doc = await self.elasticsearch_service.get_document_by_id(document_id)
+
+                if es_doc:
+                    logger.info(f"[{request_id}] 成功从 Elasticsearch 获取文档 {document_id}")
+                    return DocumentResult(
+                        id=es_doc["id"],
+                        content=es_doc["content"],
+                        metadata=es_doc["metadata"]
+                    )
+
+            except Exception as e:
+                logger.warning(f"[{request_id}] 从 Elasticsearch 获取文档失败: {e}")
+
+            logger.info(f"[{request_id}] 文档 {document_id} 在所有存储系统中都不存在")
+            return None
+
+        except Exception as e:
+            logger.error(f"[{request_id}] 根据ID获取文档失败: {e}")
+            raise
+
     async def get_collection_info(self) -> Dict[str, Any]:
         """
         获取集合信息
-        
+
         Args:
             collection_name: 集合名称
-            
+
         Returns:
             集合信息
         """
