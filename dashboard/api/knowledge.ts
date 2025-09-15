@@ -44,7 +44,7 @@ export interface KnowledgePointListParams {
 // 添加知识点
 export const addKnowledgePoint = async (knowledgePoint: KnowledgePointInput): Promise<KnowledgePoint> => {
   return await request<KnowledgePoint>({
-    url: '/embedding/knowledge-points',
+    url: '/knowledge-base/documents',
     method: 'POST',
     data: {
       knowledge_point: knowledgePoint
@@ -55,7 +55,7 @@ export const addKnowledgePoint = async (knowledgePoint: KnowledgePointInput): Pr
 // 更新知识点
 export const updateKnowledgePoint = async (id: string, knowledgePoint: KnowledgePointInput): Promise<KnowledgePoint> => {
   return await request<KnowledgePoint>({
-    url: `/embedding/knowledge-points/${id}`,
+    url: `/knowledge-base/documents/${id}`,
     method: 'PUT',
     data: {
       knowledge_point: knowledgePoint
@@ -66,7 +66,7 @@ export const updateKnowledgePoint = async (id: string, knowledgePoint: Knowledge
 // 获取知识点列表
 export const getKnowledgePoints = async (params?: KnowledgePointListParams): Promise<KnowledgePointsResponse> => {
   return await request<KnowledgePointsResponse>({
-    url: '/embedding/knowledge-points',
+    url: '/knowledge-base/documents',
     method: 'GET',
     params,
   });
@@ -75,7 +75,7 @@ export const getKnowledgePoints = async (params?: KnowledgePointListParams): Pro
 // 获取知识点详情
 export const getKnowledgePoint = async (id: string): Promise<KnowledgePoint> => {
   return await request<KnowledgePoint>({
-    url: `/embedding/knowledge-points/${id}`,
+    url: `/knowledge-base/documents/${id}`,
     method: 'GET',
   });
 };
@@ -83,7 +83,7 @@ export const getKnowledgePoint = async (id: string): Promise<KnowledgePoint> => 
 // 删除知识点
 export const deleteKnowledgePoint = async (id: string): Promise<void> => {
   await request<void>({
-    url: `/embedding/knowledge-points/${id}`,
+    url: `/knowledge-base/documents/${id}`,
     method: 'DELETE',
   });
 };
@@ -91,7 +91,7 @@ export const deleteKnowledgePoint = async (id: string): Promise<void> => {
 // 查询文档（用于搜索知识点）
 export const queryDocuments = async (query: string, nResults: number = 5): Promise<any> => {
   return await request<any>({
-    url: '/embedding/query',
+    url: '/knowledge-base/query',
     method: 'POST',
     data: {
       query,
@@ -104,7 +104,7 @@ export const queryDocuments = async (query: string, nResults: number = 5): Promi
 // 获取集合信息
 export const getCollectionInfo = async (): Promise<any> => {
   return await request<any>({
-    url: '/embedding/collections/math_knowledge',
+    url: '/knowledge-base/info',
     method: 'GET',
   });
 };
@@ -112,7 +112,7 @@ export const getCollectionInfo = async (): Promise<any> => {
 // 清空知识库
 export const clearKnowledgeBase = async (): Promise<void> => {
   await request<void>({
-    url: '/embedding/clear',
+    url: '/knowledge-base/delete-all',
     method: 'POST',
   });
 };
@@ -136,13 +136,13 @@ export interface BatchKnowledgePointsResponse {
 // 解析文档生成知识点预览
 export const parseDocument = async (
   file: File, 
-  maxKnowledgePoints: number = 10
+  maxDocuments: number = 10
 ): Promise<DocumentParseResponse> => {
   const formData = new FormData();
   formData.append('file', file);
   
   return await request<DocumentParseResponse>({
-    url: `/embedding/parse-document?max_knowledge_points=${maxKnowledgePoints}`,
+    url: `/knowledge-base/upload-document?max_documents=${maxDocuments}`,
     method: 'POST',
     data: formData,
     headers: {
@@ -156,7 +156,7 @@ export const batchAddKnowledgePoints = async (
   knowledgePoints: KnowledgePointInput[]
 ): Promise<BatchKnowledgePointsResponse> => {
   return await request<BatchKnowledgePointsResponse>({
-    url: '/embedding/batch-knowledge-points',
+    url: '/knowledge-base/batch-documents',
     method: 'POST',
     data: {
       knowledge_points: knowledgePoints

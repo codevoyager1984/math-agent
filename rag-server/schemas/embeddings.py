@@ -53,7 +53,7 @@ class ExampleInput(BaseModel):
     difficulty: Optional[str] = Field(default="medium", description="难度等级：easy, medium, hard")
 
 
-class KnowledgePointInput(BaseModel):
+class AddDocumentInput(BaseModel):
     """知识点输入模型"""
     title: str = Field(..., description="知识点名称")
     description: str = Field(..., description="知识点描述")
@@ -63,7 +63,7 @@ class KnowledgePointInput(BaseModel):
 
 class KnowledgePointAddRequest(BaseModel):
     """添加知识点请求"""
-    knowledge_point: KnowledgePointInput = Field(..., description="知识点信息")
+    knowledge_point: AddDocumentInput = Field(..., description="知识点信息")
 
 class KnowledgePointResponse(BaseModel):
     """知识点响应模型"""
@@ -97,13 +97,13 @@ class DocumentParseResponse(BaseModel):
     """文档解析响应"""
     filename: str = Field(..., description="文件名")
     extracted_text: str = Field(..., description="提取的文本内容")
-    knowledge_points: List[KnowledgePointInput] = Field(..., description="生成的知识点列表")
+    knowledge_points: List[AddDocumentInput] = Field(..., description="生成的知识点列表")
     total_points: int = Field(..., description="知识点总数")
 
 
 class BatchKnowledgePointsRequest(BaseModel):
     """批量添加知识点请求"""
-    knowledge_points: List[KnowledgePointInput] = Field(..., description="知识点列表")
+    knowledge_points: List[AddDocumentInput] = Field(..., description="知识点列表")
 
 
 class BatchKnowledgePointsResponse(BaseModel):

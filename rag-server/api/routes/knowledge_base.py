@@ -11,7 +11,7 @@ import logging
 
 from schemas.embeddings import (
     DocumentsAddRequest, ExampleInput, KnowledgePointAddRequest, QueryRequest, QueryResponse, 
-    CollectionInfo, KnowledgePointInput, KnowledgePointResponse, 
+    CollectionInfo, AddDocumentInput, KnowledgePointResponse, 
     KnowledgePointsResponse, DocumentParseRequest, DocumentParseResponse,
     BatchKnowledgePointsRequest, BatchKnowledgePointsResponse
 )
@@ -21,52 +21,52 @@ from services.rag_service import rag_service
 from services.document_processor import document_processor
 from services.ai_service import get_ai_service
 from loguru import logger
+import uuid
+from datetime import datetime
+from schemas.embeddings import DocumentInput
 
 # 创建路由器
 router = APIRouter()
 
-
 @router.post(
-    "/knowledge-points",
+    "/documents",
     response_model=KnowledgePointResponse,
     status_code=status.HTTP_201_CREATED,
     summary="添加知识点",
-    description="添加数学知识点及相关例题"
+    description="往知识库里面添加文档"
 )
-async def add_knowledge_point(request: KnowledgePointAddRequest):
-    """
-    添加知识点到知识库
-    
-    - **knowledge_point**: 知识点信息，包含名称、描述、例题等
-    """
+async def add_document(request: AddDocumentInput):
     try:
-        import uuid
-        from datetime import datetime
-        from schemas.embeddings import DocumentInput
-        
-        knowledge_point = request.knowledge_point
         
         # 生成知识点ID
         knowledge_id = str(uuid.uuid4())
+
+        title = request.title
+        description = request.description
+        category = request.category or 'general'
+        examples = request.examples
+        tags = request.tags
         
         # 准备文档内容 - 主要用于向量搜索
         content_parts = [
-            f"知识点: {knowledge_point.title}",
-            f"描述: {knowledge_point.description}",
-            f"分类: {knowledge_point.category or 'general'}"
+            f"知识点: {title}",
+            f"描述: {description}",
+            f"分类: {category}"
         ]
         
         # 添加例题到内容中用于向量搜索
-        for i, example in enumerate(knowledge_point.examples, 1):
+        for i, example in enumerate(examples, 1):
             content_parts.extend([
                 f"例题{i}: {example.question}",
                 f"解答步骤: {example.solution}"
             ])
         
-        if knowledge_point.tags:
-            content_parts.append(f"标签: {', '.join(knowledge_point.tags)}")
+        if tags:
+            content_parts.append(f"标签: {', '.join(tags)}")
         
         document_content = "\n".join(content_parts)
+
+        logger.info(f"Embedding content: {document_content}")
         
         # 准备元数据 - 存储完整的结构化数据（序列化复杂类型）
         examples_data = [
@@ -74,21 +74,22 @@ async def add_knowledge_point(request: KnowledgePointAddRequest):
                 "question": ex.question,
                 "solution": ex.solution,
                 "difficulty": ex.difficulty
-            } for ex in knowledge_point.examples
+            } for ex in examples
         ]
         
         current_time = datetime.now().isoformat()
         metadata = {
-            "type": "knowledge_point",
-            "title": knowledge_point.title,
-            "description": knowledge_point.description,
-            "category": knowledge_point.category or "general",
-            "tags": json.dumps(knowledge_point.tags or [], ensure_ascii=False),  # 序列化为JSON字符串
+            "title": title,
+            "description": description,
+            "category": category,
+            "tags": json.dumps(tags or [], ensure_ascii=False),  # 序列化为JSON字符串
             "examples": json.dumps(examples_data, ensure_ascii=False),  # 序列化为JSON字符串
-            "examples_count": len(knowledge_point.examples),
+            "examples_count": len(examples),
             "created_at": current_time,
             "updated_at": current_time
         }
+
+        logger.info(f"Metadata: {metadata}")
         
         # 创建文档
         document = DocumentInput(
@@ -100,20 +101,19 @@ async def add_knowledge_point(request: KnowledgePointAddRequest):
         # 添加到向量数据库
         success = await rag_service.add_documents(
             documents=[document],
-            collection_name="math_knowledge"
         )
         
         if success:
             # 返回知识点信息（反序列化JSON数据）
             return KnowledgePointResponse(
                 id=knowledge_id,
-                title=metadata["title"],
-                description=metadata["description"],
-                category=metadata["category"],
+                title=title,
+                description=description,
+                category=category,
                 examples=examples_data,  # 直接使用原始数据
-                tags=knowledge_point.tags or [],  # 直接使用原始数据
-                created_at=metadata["created_at"],
-                updated_at=metadata["updated_at"]
+                tags=tags or [],  # 直接使用原始数据
+                created_at=current_time,
+                updated_at=current_time
             )
         else:
             raise HTTPException(
@@ -146,7 +146,6 @@ async def query_documents(request: QueryRequest):
     try:
         response = await rag_service.query_documents(
             query=request.query,
-            collection_name="math_knowledge",
             n_results=request.n_results,
             include_metadata=request.include_metadata
         )
@@ -154,7 +153,7 @@ async def query_documents(request: QueryRequest):
         return response
         
     except Exception as e:
-        logger.error(f"查询文档接口错误: {e}")
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"查询文档失败: {str(e)}"
@@ -162,19 +161,19 @@ async def query_documents(request: QueryRequest):
 
 
 @router.get(
-    "/collections/{collection_name}",
+    "/info",
     response_model=CollectionInfo,
     summary="获取集合信息",
     description="获取指定集合的信息"
 )
-async def get_collection_info(collection_name: str):
+async def get_collection_info():
     """
     获取集合信息
     
     - **collection_name**: 集合名称
     """
     try:
-        info = await rag_service.get_collection_info(collection_name)
+        info = await rag_service.get_collection_info()
         return CollectionInfo(**info)
         
     except Exception as e:
@@ -186,7 +185,7 @@ async def get_collection_info(collection_name: str):
 
 
 @router.get(
-    "/knowledge-points",
+    "/documents",
     response_model=KnowledgePointsResponse,
     summary="获取知识点列表",
     description="分页获取知识点列表"
@@ -206,13 +205,10 @@ async def get_knowledge_points(
     - **search**: 搜索关键词
     """
     try:
-        # 构建查询条件
-        query_text = search if search else "知识点"
-        
+        # 构建查询条件        
         # 查询文档
         response = await rag_service.query_documents(
-            query=query_text,
-            collection_name="math_knowledge",
+            query=search,
             n_results=min(limit * 5, 100),  # 获取更多结果用于筛选
             include_metadata=True
         )
@@ -220,8 +216,7 @@ async def get_knowledge_points(
         # 筛选知识点类型的文档
         knowledge_points = []
         for doc in response.results:
-            if (doc.metadata and 
-                doc.metadata.get("type") == "knowledge_point"):
+            if (doc.metadata):
                 
                 # 分类筛选
                 if category and doc.metadata.get("category") != category:
@@ -240,9 +235,9 @@ async def get_knowledge_points(
                 
                 knowledge_point = KnowledgePointResponse(
                     id=doc.id,
-                    title=doc.metadata.get("title", "未知知识点"),
-                    description=doc.metadata.get("description", ""),
-                    category=doc.metadata.get("category", "general"),
+                    title=doc.metadata.get("title"),
+                    description=doc.metadata.get("description"),
+                    category=doc.metadata.get("category"),
                     examples=examples,
                     tags=tags,
                     created_at=doc.metadata.get("created_at"),
@@ -252,7 +247,7 @@ async def get_knowledge_points(
         
         # 按照创建时间从新到旧排序
         knowledge_points.sort(
-            key=lambda kp: kp.created_at or "1970-01-01T00:00:00",
+            key=lambda kp: kp.created_at,
             reverse=True
         )
         
@@ -270,6 +265,7 @@ async def get_knowledge_points(
         
     except Exception as e:
         logger.error(f"获取知识点列表接口错误: {e}")
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"获取知识点列表失败: {str(e)}"
@@ -277,7 +273,7 @@ async def get_knowledge_points(
 
 
 @router.post(
-    "/clear",
+    "/delete-all",
     response_model=dict,
     summary="清空知识库",
     description="清空所有知识点数据"
@@ -311,12 +307,12 @@ async def clear_knowledge_base():
 
 
 @router.get(
-    "/knowledge-points/{knowledge_id}",
+    "/documents/{document_id}",
     response_model=KnowledgePointResponse,
     summary="获取知识点详情",
     description="根据ID获取指定知识点的详细信息"
 )
-async def get_knowledge_point(knowledge_id: str):
+async def get_knowledge_point(document_id: str):
     """
     获取知识点详情
     
@@ -325,7 +321,7 @@ async def get_knowledge_point(knowledge_id: str):
     try:
         # 通过ID查询知识点
         result = await rag_service.query_documents(
-            query=knowledge_id,  # 使用ID作为查询
+            query=document_id,  # 使用ID作为查询
             n_results=1000,  # 获取更多结果
             collection_name="math_knowledge"
         )
@@ -336,7 +332,7 @@ async def get_knowledge_point(knowledge_id: str):
         # 查找匹配的ID
         target_result = None
         for doc_result in result.results:
-            if doc_result.id == knowledge_id:
+            if doc_result.id == document_id:
                 target_result = doc_result
                 break
         
@@ -352,7 +348,7 @@ async def get_knowledge_point(knowledge_id: str):
         examples_data = json.loads(metadata.get("examples", "[]"))
         
         return KnowledgePointResponse(
-            id=knowledge_id,
+            id=document_id,
             title=metadata.get("title", ""),
             description=metadata.get("description", ""),  # 使用metadata中的原始description
             category=metadata.get("category", "general"),
@@ -369,12 +365,12 @@ async def get_knowledge_point(knowledge_id: str):
         raise HTTPException(status_code=500, detail=f"获取知识点详情失败: {str(e)}")
 
 @router.put(
-    "/knowledge-points/{knowledge_id}",
+    "/documents/{document_id}",
     response_model=KnowledgePointResponse,
     summary="更新知识点",
     description="更新指定ID的知识点"
 )
-async def update_knowledge_point(knowledge_id: str, request: KnowledgePointAddRequest):
+async def update_knowledge_point(document_id: str, request: KnowledgePointAddRequest):
     """
     更新知识点
     
@@ -391,14 +387,13 @@ async def update_knowledge_point(knowledge_id: str, request: KnowledgePointAddRe
         try:
             # 查询现有知识点获取创建时间
             existing_result = await rag_service.query_documents(
-                query=knowledge_id,
+                query=document_id,
                 n_results=1000,
-                collection_name="math_knowledge"
             )
             
             # 查找匹配的ID
             for doc_result in existing_result.results:
-                if doc_result.id == knowledge_id and doc_result.metadata:
+                if doc_result.id == document_id and doc_result.metadata:
                     existing_created_at = doc_result.metadata.get("created_at")
                     break
         except Exception as e:
@@ -435,7 +430,6 @@ async def update_knowledge_point(knowledge_id: str, request: KnowledgePointAddRe
         ]
         
         metadata = {
-            "type": "knowledge_point",
             "title": knowledge_point.title,
             "description": knowledge_point.description,
             "category": knowledge_point.category or "general",
@@ -448,7 +442,7 @@ async def update_knowledge_point(knowledge_id: str, request: KnowledgePointAddRe
         
         # 创建文档
         document = DocumentInput(
-            id=knowledge_id,
+            id=document_id,
             content=document_content,
             metadata=metadata
         )
@@ -462,7 +456,7 @@ async def update_knowledge_point(knowledge_id: str, request: KnowledgePointAddRe
         if success:
             # 返回知识点信息（反序列化JSON数据）
             return KnowledgePointResponse(
-                id=knowledge_id,
+                id=document_id,
                 title=metadata["title"],
                 description=knowledge_point.description,  # 使用原始的description
                 category=metadata["category"],
@@ -486,12 +480,12 @@ async def update_knowledge_point(knowledge_id: str, request: KnowledgePointAddRe
 
 
 @router.delete(
-    "/knowledge-points/{knowledge_id}",
+    "/documents/{document_id}",
     response_model=dict,
     summary="删除知识点",
     description="根据ID删除知识点"
 )
-async def delete_knowledge_point(knowledge_id: str):
+async def delete_knowledge_point(document_id: str):
     """
     删除知识点
     
@@ -499,14 +493,13 @@ async def delete_knowledge_point(knowledge_id: str):
     """
     try:
         success = await rag_service.delete_documents(
-            ids=[knowledge_id],
-            collection_name="math_knowledge"
+            ids=[document_id],
         )
         
         if success:
             return {
                 "message": "知识点删除成功",
-                "knowledge_id": knowledge_id
+                "knowledge_id": document_id
             }
         else:
             raise HTTPException(
@@ -523,20 +516,20 @@ async def delete_knowledge_point(knowledge_id: str):
 
 
 @router.post(
-    "/parse-document",
+    "/upload-document",
     response_model=DocumentParseResponse,
     summary="解析文档生成知识点",
     description="上传文档并解析生成知识点预览"
 )
 async def parse_document(
     file: UploadFile = File(...),
-    max_knowledge_points: int = Query(10, ge=1, le=20, description="最大知识点数量")
+    max_documents: int = Query(10, ge=1, le=20, description="最大文档数量")
 ):
     """
     解析文档生成知识点预览
     
     - **file**: 上传的文档文件（支持 PDF, DOCX, TXT, MD 格式）
-    - **max_knowledge_points**: 最大生成知识点数量
+    - **max_documents**: 最大生成文档数量
     """
     # Generate request ID for tracking the entire flow
     import uuid
@@ -547,7 +540,7 @@ async def parse_document(
     
     logger.info(f"[{request_id}] Document parsing request started")
     logger.info(f"[{request_id}] File: {file.filename}, Content-Type: {file.content_type}")
-    logger.info(f"[{request_id}] Max knowledge points: {max_knowledge_points}")
+    logger.info(f"[{request_id}] Max documents: {max_documents}")
     
     try:
         # 检查文件类型
@@ -602,7 +595,7 @@ async def parse_document(
         ai_service = get_ai_service()
         knowledge_points_data = await ai_service.generate_knowledge_points(
             extracted_text, 
-            max_points=max_knowledge_points
+            max_points=max_documents
         )
         ai_time = time.time() - ai_start
         logger.info(f"[{request_id}] AI processing completed in {ai_time:.3f}s")
@@ -624,7 +617,7 @@ async def parse_document(
                 for ex in kp_data.examples
             ]
             
-            kp_input = KnowledgePointInput(
+            kp_input = AddDocumentInput(
                 title=kp_data.title,
                 description=kp_data.description,
                 category=kp_data.category,
@@ -677,12 +670,12 @@ async def parse_document(
 
 
 @router.post(
-    "/batch-knowledge-points",
+    "/batch-documents",
     response_model=BatchKnowledgePointsResponse,
     summary="批量添加知识点",
     description="批量添加多个知识点到知识库"
 )
-async def batch_add_knowledge_points(request: BatchKnowledgePointsRequest):
+async def batch_add_documents(request: BatchKnowledgePointsRequest):
     """
     批量添加知识点
     
@@ -731,7 +724,6 @@ async def batch_add_knowledge_points(request: BatchKnowledgePointsRequest):
                 
                 current_time = datetime.now().isoformat()
                 metadata = {
-                    "type": "knowledge_point",
                     "title": knowledge_point.title,
                     "description": knowledge_point.description,
                     "category": knowledge_point.category or "general",
@@ -752,7 +744,6 @@ async def batch_add_knowledge_points(request: BatchKnowledgePointsRequest):
                 # 添加到向量数据库
                 success = await rag_service.add_documents(
                     documents=[document],
-                    collection_name="math_knowledge"
                 )
                 
                 if success:

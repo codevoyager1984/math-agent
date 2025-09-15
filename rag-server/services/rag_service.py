@@ -16,11 +16,11 @@ class RAGService:
         """初始化 RAG 服务"""
         self.embedding_service = embedding_service
         self.chroma_service = chroma_service
+        self.collection_name = "math_knowledge"
     
     async def add_documents(
         self,
         documents: List[DocumentInput],
-        collection_name: str = "math_knowledge"
     ) -> bool:
         """
         添加文档到知识库
@@ -47,9 +47,9 @@ class RAGService:
             embeddings = await self.embedding_service.encode_batch(contents)
             
             # 存储到 ChromaDB
-            logger.info(f"正在将文档存储到集合 {collection_name}...")
+            logger.info(f"正在将文档存储到集合 {self.collection_name}...")
             success = await self.chroma_service.add_documents(
-                collection_name=collection_name,
+                collection_name=self.collection_name,
                 documents=contents,
                 ids=ids,
                 embeddings=embeddings,
@@ -68,7 +68,6 @@ class RAGService:
     async def query_documents(
         self,
         query: str,
-        collection_name: str = "math_knowledge",
         n_results: int = 5,
         include_metadata: bool = True
     ) -> QueryResponse:
@@ -85,6 +84,7 @@ class RAGService:
             查询响应
         """
         try:
+            query = query.strip() if query else ""
             # 生成查询向量
             logger.info(f"正在为查询生成嵌入向量: {query[:50]}...")
             query_embedding = await self.embedding_service.encode(query)
@@ -93,9 +93,9 @@ class RAGService:
             include = ["documents", "distances", "metadatas"] if include_metadata else ["documents", "distances"]
             
             # 查询 ChromaDB
-            logger.info(f"正在查询集合 {collection_name}...")
+            logger.info(f"正在查询集合 {self.collection_name}...")
             results = await self.chroma_service.query_documents(
-                collection_name=collection_name,
+                collection_name=self.collection_name,
                 query_embeddings=[query_embedding],
                 n_results=n_results,
                 include=include
@@ -136,7 +136,6 @@ class RAGService:
     async def upsert_documents(
         self,
         documents: List[DocumentInput],
-        collection_name: str = "math_knowledge"
     ) -> bool:
         """
         更新或插入文档到知识库（upsert操作）
@@ -163,9 +162,9 @@ class RAGService:
             embeddings = await self.embedding_service.encode_batch(contents)
             
             # Upsert到 ChromaDB
-            logger.info(f"正在将文档upsert到集合 {collection_name}...")
+            logger.info(f"正在将文档upsert到集合 {self.collection_name}...")
             success = await self.chroma_service.upsert_documents(
-                collection_name=collection_name,
+                collection_name=self.collection_name,
                 documents=contents,
                 ids=ids,
                 embeddings=embeddings,
@@ -184,7 +183,6 @@ class RAGService:
     async def delete_documents(
         self,
         ids: List[str],
-        collection_name: str = "math_knowledge"
     ) -> bool:
         """
         删除文档
@@ -198,7 +196,7 @@ class RAGService:
         """
         try:
             success = await self.chroma_service.delete_documents(
-                collection_name=collection_name,
+                collection_name=self.collection_name,
                 ids=ids
             )
             
@@ -211,7 +209,7 @@ class RAGService:
             logger.error(f"删除文档失败: {e}")
             raise
     
-    async def get_collection_info(self, collection_name: str = "math_knowledge") -> Dict[str, Any]:
+    async def get_collection_info(self) -> Dict[str, Any]:
         """
         获取集合信息
         
@@ -222,7 +220,7 @@ class RAGService:
             集合信息
         """
         try:
-            return await self.chroma_service.get_collection_info(collection_name)
+            return await self.chroma_service.get_collection_info(self.collection_name)
         except Exception as e:
             logger.error(f"获取集合信息失败: {e}")
             raise
@@ -281,7 +279,7 @@ class RAGService:
             是否成功
         """
         try:
-            success = await self.chroma_service.clear_collection("math_knowledge")
+            success = await self.chroma_service.clear_collection(self.collection_name)
             if success:
                 logger.info("知识库清空成功")
             return success
