@@ -163,7 +163,6 @@ class AIService:
 【第三步：输出格式】
 按以下JSON格式输出：
 {{
-  "document_type": "complete_tutorial|mixed_content",
   "knowledge_points": [
     {{
       "title": "知识点标题",
@@ -285,7 +284,10 @@ class AIService:
             ],
             "max_tokens": 32768,
             "temperature": 0.3,
-            "stream": False
+            "stream": False,
+            "thinking": {
+                "type": "disabled"
+            }
         }
         
         # Log request details (without sensitive content)
