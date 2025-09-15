@@ -185,6 +185,32 @@ export interface DocumentParseResponse {
   total_points: number;
 }
 
+// 聊天会话相关接口
+export interface ChatSessionCreateRequest {
+  filename: string;
+  extracted_text: string;
+  max_documents?: number;
+  user_requirements?: string;
+}
+
+export interface DocumentParseSessionResponse {
+  session_id: string;
+  filename: string;
+  extracted_text_preview: string;
+}
+
+export interface ChatSessionResponse {
+  session_id: string;
+  filename: string;
+  created_at: string;
+  status: string;
+}
+
+export interface ChatMessageRequest {
+  message: string;
+  message_type?: 'text' | 'initial_generation';
+}
+
 export interface BatchKnowledgePointsResponse {
   success_count: number;
   failed_count: number;
@@ -193,19 +219,19 @@ export interface BatchKnowledgePointsResponse {
   errors: string[];
 }
 
-// 解析文档生成知识点预览
-export const parseDocument = async (
-  file: File, 
+// 解析文档并创建会话（新版本）
+export const parseDocumentAndCreateSession = async (
+  file: File,
   maxDocuments: number = 10,
   userRequirements: string = ''
-): Promise<DocumentParseResponse> => {
+): Promise<DocumentParseSessionResponse> => {
   const formData = new FormData();
   formData.append('file', file);
   if (userRequirements.trim()) {
     formData.append('user_requirements', userRequirements);
   }
-  
-  return await request<DocumentParseResponse>({
+
+  return await request<DocumentParseSessionResponse>({
     url: `/knowledge-base/upload-document?max_documents=${maxDocuments}`,
     method: 'POST',
     data: formData,
@@ -227,3 +253,62 @@ export const batchAddKnowledgePoints = async (
     },
   });
 };
+
+// 聊天会话相关API
+
+// 创建聊天会话
+export const createChatSession = async (
+  sessionRequest: ChatSessionCreateRequest
+): Promise<DocumentParseSessionResponse> => {
+  return await request<DocumentParseSessionResponse>({
+    url: '/knowledge-base/create-chat-session',
+    method: 'POST',
+    data: sessionRequest,
+  });
+};
+
+// 获取聊天会话信息
+export const getChatSession = async (sessionId: string): Promise<ChatSessionResponse> => {
+  return await request<ChatSessionResponse>({
+    url: `/knowledge-base/chat-session/${sessionId}`,
+    method: 'GET',
+  });
+};
+
+// 获取会话当前知识点
+export const getSessionKnowledgePoints = async (sessionId: string): Promise<DocumentInput[]> => {
+  return await request<DocumentInput[]>({
+    url: `/knowledge-base/chat-session/${sessionId}/knowledge-points`,
+    method: 'GET',
+  });
+};
+
+// 删除聊天会话
+export const deleteChatSession = async (sessionId: string): Promise<void> => {
+  await request<void>({
+    url: `/knowledge-base/chat-session/${sessionId}`,
+    method: 'DELETE',
+  });
+};
+
+// 发送聊天消息（流式响应）
+export const sendChatMessage = async (
+  sessionId: string,
+  messageRequest: ChatMessageRequest
+): Promise<Response> => {
+  // 直接返回Response对象，让调用者处理流式数据
+  const response = await fetch(`/api/rag/knowledge-base/chat-stream/${sessionId}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(messageRequest),
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  return response;
+};
+

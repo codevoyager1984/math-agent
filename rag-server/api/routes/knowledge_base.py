@@ -4,26 +4,30 @@ FastAPI 路由定义
 from datetime import datetime
 import json
 import traceback
-from typing import List, Optional
+from typing import List, Optional, Dict
 from fastapi import APIRouter, HTTPException, status, Query, File, UploadFile, Form
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import Response
 import logging
 
 from schemas.embeddings import (
     DocumentsAddRequest, ExampleInput, KnowledgePointAddRequest, QueryRequest, QueryResponse,
     CollectionInfo, AddDocumentInput, KnowledgePointResponse,
     KnowledgePointsResponse, DocumentParseRequest, DocumentParseResponse,
-    BatchKnowledgePointsRequest, BatchKnowledgePointsResponse
+    BatchKnowledgePointsRequest, BatchKnowledgePointsResponse, 
+    ChatSessionCreateRequest, ChatSessionResponse, ChatMessageRequest, DocumentParseSessionResponse
 )
-from schemas.common import HealthCheck, ErrorResponse
+# 移除未使用的导入
 from services.rag_service import rag_service
 # 文档处理相关接口
 from services.document_processor import document_processor
 from services.ai_service import get_ai_service
+from services.chat_session_service import get_chat_session_service
 from loguru import logger
 import uuid
 from datetime import datetime
 from schemas.embeddings import DocumentInput
+# BaseModel已在schemas中定义
 
 # 创建路由器
 router = APIRouter()
@@ -526,34 +530,33 @@ async def delete_knowledge_point(document_id: str):
 
 @router.post(
     "/upload-document",
-    response_model=DocumentParseResponse,
-    summary="解析文档生成知识点",
-    description="上传文档并解析生成知识点预览"
+    response_model=DocumentParseSessionResponse,
+    summary="上传文档并创建解析会话",
+    description="上传文档、提取文本内容并创建聊天会话"
 )
 async def parse_document(
     file: UploadFile = File(...),
-    max_documents: int = Query(10, ge=1, le=20, description="最大文档数量"),
+    max_documents: int = Query(10, ge=1, le=20, description="最大知识点数量"),
     user_requirements: Optional[str] = Form(None, description="用户对知识点提取的额外要求")
 ):
     """
-    解析文档生成知识点预览
-    
+    上传文档并创建解析会话
+
     - **file**: 上传的文档文件（支持 PDF, DOCX, TXT, MD 格式）
-    - **max_documents**: 最大生成文档数量
+    - **max_documents**: 最大知识点数量
     - **user_requirements**: 用户对知识点提取的额外要求（可选）
     """
     # Generate request ID for tracking the entire flow
-    import uuid
     import time
-    
+
     request_id = str(uuid.uuid4())[:8]
     start_time = time.time()
-    
-    logger.info(f"[{request_id}] Document parsing request started")
+
+    logger.info(f"[{request_id}] Document upload and session creation started")
     logger.info(f"[{request_id}] File: {file.filename}, Content-Type: {file.content_type}")
     logger.info(f"[{request_id}] Max documents: {max_documents}")
     logger.info(f"[{request_id}] User requirements: {user_requirements or 'None'}")
-    
+
     try:
         # 检查文件类型
         logger.debug(f"[{request_id}] Validating file format")
@@ -563,108 +566,71 @@ async def parse_document(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"不支持的文件格式。支持的格式：{', '.join(document_processor.SUPPORTED_EXTENSIONS.keys())}"
             )
-        
+
         file_type = document_processor.get_file_type(file.filename)
         logger.info(f"[{request_id}] File format validated: {file_type}")
-        
+
         # 检查文件大小（限制为 10MB）
         logger.debug(f"[{request_id}] Reading file content")
         max_file_size = 10 * 1024 * 1024  # 10MB
         file_read_start = time.time()
         file_content = await file.read()
         file_read_time = time.time() - file_read_start
-        
+
         file_size_mb = len(file_content) / 1024 / 1024
         logger.info(f"[{request_id}] File read completed in {file_read_time:.3f}s")
         logger.info(f"[{request_id}] File size: {file_size_mb:.2f}MB ({len(file_content)} bytes)")
-        
+
         if len(file_content) > max_file_size:
             logger.warning(f"[{request_id}] File too large: {file_size_mb:.2f}MB > 10MB")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="文件大小超过限制（最大 10MB）"
             )
-        
+
         # 提取文档文本
         logger.info(f"[{request_id}] Starting text extraction from document")
         text_extract_start = time.time()
         extracted_text = await document_processor.process_file_content(file_content, file.filename)
         text_extract_time = time.time() - text_extract_start
-        
+
         logger.info(f"[{request_id}] Text extraction completed in {text_extract_time:.3f}s")
         logger.info(f"[{request_id}] Extracted text length: {len(extracted_text)} characters")
-        
+
         if not extracted_text.strip():
             logger.error(f"[{request_id}] No valid text content extracted from document")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="无法从文档中提取有效文本内容"
             )
-        
-        # 使用 AI 生成知识点
-        logger.info(f"[{request_id}] Starting AI knowledge point generation")
-        ai_start = time.time()
-        ai_service = get_ai_service()
-        knowledge_points_data = await ai_service.generate_knowledge_points(
-            extracted_text, 
-            max_points=max_documents,
+
+        # 创建聊天会话（替代AI处理）
+        logger.info(f"[{request_id}] Creating chat session for document parsing")
+        session_create_start = time.time()
+        session_service = get_chat_session_service()
+        session_id = session_service.create_session(
+            filename=file.filename,
+            extracted_text=extracted_text,
+            max_documents=max_documents,
             user_requirements=user_requirements
         )
-        ai_time = time.time() - ai_start
-        logger.info(f"[{request_id}] AI processing completed in {ai_time:.3f}s")
-        
-        # 转换为响应格式
-        logger.debug(f"[{request_id}] Converting to response format")
-        conversion_start = time.time()
-        knowledge_points = []
-        
-        for i, kp_data in enumerate(knowledge_points_data):
-            logger.debug(f"[{request_id}] Converting knowledge point {i+1}/{len(knowledge_points_data)}")
-            
-            examples = [
-                {
-                    "question": ex.question,
-                    "solution": ex.solution,
-                    "difficulty": ex.difficulty
-                } 
-                for ex in kp_data.examples
-            ]
-            
-            kp_input = AddDocumentInput(
-                title=kp_data.title,
-                description=kp_data.description,
-                category=kp_data.category,
-                examples=examples,
-                tags=kp_data.tags
-            )
-            knowledge_points.append(kp_input)
-        
-        conversion_time = time.time() - conversion_start
-        logger.debug(f"[{request_id}] Response conversion completed in {conversion_time:.3f}s")
-        
+        session_create_time = time.time() - session_create_start
+
+        logger.info(f"[{request_id}] Chat session created in {session_create_time:.3f}s")
+        logger.info(f"[{request_id}] Session ID: {session_id}")
+
         # 准备响应
-        response_text_preview = extracted_text[:2000] + ("..." if len(extracted_text) > 2000 else "")
-        
+        text_preview = extracted_text[:2000] + ("..." if len(extracted_text) > 2000 else "")
+
         total_time = time.time() - start_time
-        logger.info(f"[{request_id}] Document parsing completed successfully")
+        logger.info(f"[{request_id}] Document processing completed successfully")
         logger.info(f"[{request_id}] Total processing time: {total_time:.3f}s")
-        logger.info(f"[{request_id}] Timing breakdown - File read: {file_read_time:.3f}s, Text extraction: {text_extract_time:.3f}s, AI processing: {ai_time:.3f}s, Conversion: {conversion_time:.3f}s")
-        logger.info(f"[{request_id}] Final result: {len(knowledge_points)} knowledge points generated")
-        
-        # Log summary statistics
-        total_examples = sum(len(kp.examples) for kp in knowledge_points)
-        categories = [kp.category for kp in knowledge_points if kp.category]
-        unique_categories = set(categories) if categories else set()
-        total_tags = sum(len(kp.tags or []) for kp in knowledge_points)
-        
-        logger.info(f"[{request_id}] Content statistics - Total examples: {total_examples}, "
-                   f"Categories: {len(unique_categories)}, Total tags: {total_tags}")
-        
-        return DocumentParseResponse(
+        logger.info(f"[{request_id}] Timing breakdown - File read: {file_read_time:.3f}s, Text extraction: {text_extract_time:.3f}s, Session creation: {session_create_time:.3f}s")
+
+        return DocumentParseSessionResponse(
+            session_id=session_id,
             filename=file.filename,
-            extracted_text=response_text_preview,
-            knowledge_points=knowledge_points,
-            total_points=len(knowledge_points)
+            extracted_text_preview=text_preview
         )
         
     except HTTPException as he:
@@ -782,5 +748,347 @@ async def batch_add_documents(request: BatchKnowledgePointsRequest):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"批量添加知识点失败: {str(e)}"
+        )
+
+
+@router.post(
+    "/create-chat-session",
+    response_model=DocumentParseSessionResponse,
+    summary="创建文档解析聊天会话",
+    description="创建新的文档解析聊天会话，用于流式对话生成知识点"
+)
+async def create_chat_session(request: ChatSessionCreateRequest):
+    """
+    创建文档解析聊天会话
+
+    - **filename**: 文档文件名
+    - **extracted_text**: 提取的文档文本
+    - **max_documents**: 最大知识点数量
+    - **user_requirements**: 用户特殊要求（可选）
+    """
+    request_id = str(uuid.uuid4())[:8]
+
+    try:
+        logger.info(f"[{request_id}] Creating chat session for document: {request.filename}")
+        logger.info(f"[{request_id}] Text length: {len(request.extracted_text)} characters")
+
+        # 创建会话
+        session_service = get_chat_session_service()
+        session_id = session_service.create_session(
+            filename=request.filename,
+            extracted_text=request.extracted_text,
+            max_documents=request.max_documents,
+            user_requirements=request.user_requirements
+        )
+
+        # 准备响应
+        text_preview = request.extracted_text[:2000] + ("..." if len(request.extracted_text) > 2000 else "")
+
+        logger.info(f"[{request_id}] Chat session created successfully: {session_id}")
+
+        return DocumentParseSessionResponse(
+            session_id=session_id,
+            filename=request.filename,
+            extracted_text_preview=text_preview
+        )
+
+    except Exception as e:
+        logger.error(f"[{request_id}] Failed to create chat session: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"创建聊天会话失败: {str(e)}"
+        )
+
+
+@router.post(
+    "/chat-stream/{session_id}",
+    summary="流式聊天对话",
+    description="发送消息并获取AI的流式响应，支持思考过程展示"
+)
+async def chat_stream(session_id: str, request: ChatMessageRequest):
+    """
+    流式聊天对话接口
+
+    - **session_id**: 会话ID
+    - **message**: 用户消息内容
+    - **message_type**: 消息类型 ("text" | "initial_generation")
+    """
+    request_id = session_id[:8]
+
+    try:
+        logger.info(f"[{request_id}] Starting chat stream for session: {session_id}")
+        logger.info(f"[{request_id}] Message type: {request.message_type}")
+        logger.debug(f"[{request_id}] User message: {request.message[:100]}...")
+
+        # 获取会话
+        session_service = get_chat_session_service()
+        session = session_service.get_session(session_id)
+
+        if not session:
+            logger.error(f"[{request_id}] Session not found: {session_id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="会话不存在或已过期"
+            )
+
+        # 添加用户消息到会话
+        session_service.add_message(
+            session_id=session_id,
+            role="user",
+            content=request.message,
+            message_type=request.message_type
+        )
+
+        # 获取AI服务
+        ai_service = get_ai_service()
+
+        # 处理不同类型的消息
+        if request.message_type == "initial_generation":
+            # 生成初始知识点
+            logger.info(f"[{request_id}] Generating initial knowledge points")
+
+            async def stream_generator():
+                """流式响应生成器"""
+                try:
+                    async for chunk in ai_service.generate_initial_knowledge_points(
+                        extracted_text=session.extracted_text,
+                        max_points=session.max_documents,
+                        user_requirements=session.user_requirements,
+                        request_id=request_id
+                    ):
+                        # 格式化为SSE格式
+                        chunk_json = json.dumps(chunk, ensure_ascii=False)
+                        yield f"data: {chunk_json}\n\n"
+
+                        # 如果有知识点数据，保存到会话
+                        if chunk.get("type") == "knowledge_points":
+                            knowledge_points = chunk.get("data", {}).get("knowledge_points", [])
+                            if knowledge_points:
+                                session_service.update_knowledge_points(session_id, knowledge_points)
+
+                        # 如果是完成消息，添加助手回复到会话
+                        if chunk.get("type") == "done":
+                            session_service.add_message(
+                                session_id=session_id,
+                                role="assistant",
+                                content=chunk.get("data", {}).get("content", ""),
+                                reasoning=chunk.get("data", {}).get("reasoning", ""),
+                                message_type="text"
+                            )
+
+                    # 发送完成标记
+                    yield "data: [DONE]\n\n"
+
+                except Exception as e:
+                    logger.error(f"[{request_id}] Error in stream generation: {str(e)}")
+                    error_chunk = {
+                        "type": "error",
+                        "data": {
+                            "error": str(e)
+                        }
+                    }
+                    yield f"data: {json.dumps(error_chunk, ensure_ascii=False)}\n\n"
+                    yield "data: [DONE]\n\n"
+
+            return StreamingResponse(
+                stream_generator(),
+                media_type="text/plain",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "Content-Type": "text/event-stream",
+                }
+            )
+
+        else:
+            # 处理常规对话
+            logger.info(f"[{request_id}] Processing regular chat message")
+
+            # 获取对话上下文
+            context_messages = session_service.get_context_messages(session_id)
+
+            # 添加当前用户消息
+            context_messages.append({
+                "role": "user",
+                "content": request.message
+            })
+
+            async def stream_generator():
+                """流式响应生成器"""
+                try:
+                    assistant_content = ""
+                    assistant_reasoning = ""
+
+                    async for chunk in ai_service.stream_chat_response(
+                        messages=context_messages,
+                        request_id=request_id
+                    ):
+                        # 格式化为SSE格式
+                        chunk_json = json.dumps(chunk, ensure_ascii=False)
+                        yield f"data: {chunk_json}\n\n"
+
+                        # 累积助手回复内容
+                        if chunk.get("type") == "content":
+                            assistant_content += chunk.get("data", {}).get("content", "")
+                        elif chunk.get("type") == "reasoning":
+                            assistant_reasoning += chunk.get("data", {}).get("reasoning", "")
+
+                        # 如果有知识点数据，保存到会话
+                        if chunk.get("type") == "knowledge_points":
+                            knowledge_points = chunk.get("data", {}).get("knowledge_points", [])
+                            if knowledge_points:
+                                session_service.update_knowledge_points(session_id, knowledge_points)
+
+                        # 如果是完成消息，添加助手回复到会话
+                        if chunk.get("type") == "done":
+                            session_service.add_message(
+                                session_id=session_id,
+                                role="assistant",
+                                content=assistant_content or chunk.get("data", {}).get("content", ""),
+                                reasoning=assistant_reasoning or chunk.get("data", {}).get("reasoning", ""),
+                                message_type="text"
+                            )
+
+                    # 发送完成标记
+                    yield "data: [DONE]\n\n"
+
+                except Exception as e:
+                    logger.error(f"[{request_id}] Error in chat stream: {str(e)}")
+                    error_chunk = {
+                        "type": "error",
+                        "data": {
+                            "error": str(e)
+                        }
+                    }
+                    yield f"data: {json.dumps(error_chunk, ensure_ascii=False)}\n\n"
+                    yield "data: [DONE]\n\n"
+
+            return StreamingResponse(
+                stream_generator(),
+                media_type="text/plain",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                    "Content-Type": "text/event-stream",
+                }
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[{request_id}] Chat stream error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"聊天对话失败: {str(e)}"
+        )
+
+
+@router.get(
+    "/chat-session/{session_id}",
+    response_model=ChatSessionResponse,
+    summary="获取聊天会话信息",
+    description="获取指定会话的基本信息"
+)
+async def get_chat_session(session_id: str):
+    """
+    获取聊天会话信息
+
+    - **session_id**: 会话ID
+    """
+    try:
+        session_service = get_chat_session_service()
+        session = session_service.get_session(session_id)
+
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="会话不存在或已过期"
+            )
+
+        return ChatSessionResponse(
+            session_id=session.session_id,
+            filename=session.filename,
+            created_at=session.created_at.isoformat(),
+            status=session.status
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取聊天会话失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取聊天会话失败: {str(e)}"
+        )
+
+
+@router.get(
+    "/chat-session/{session_id}/knowledge-points",
+    response_model=List[Dict],
+    summary="获取会话当前知识点",
+    description="获取指定会话当前的知识点数据"
+)
+async def get_session_knowledge_points(session_id: str):
+    """
+    获取会话当前知识点
+
+    - **session_id**: 会话ID
+    """
+    try:
+        session_service = get_chat_session_service()
+        session = session_service.get_session(session_id)
+
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="会话不存在或已过期"
+            )
+
+        return session.current_knowledge_points
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取会话知识点失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取会话知识点失败: {str(e)}"
+        )
+
+
+@router.delete(
+    "/chat-session/{session_id}",
+    response_model=dict,
+    summary="删除聊天会话",
+    description="删除指定的聊天会话"
+)
+async def delete_chat_session(session_id: str):
+    """
+    删除聊天会话
+
+    - **session_id**: 会话ID
+    """
+    try:
+        session_service = get_chat_session_service()
+        success = session_service.delete_session(session_id)
+
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="会话不存在"
+            )
+
+        return {
+            "message": "会话删除成功",
+            "session_id": session_id
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"删除聊天会话失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"删除聊天会话失败: {str(e)}"
         )
 

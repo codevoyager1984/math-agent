@@ -4,7 +4,7 @@ AI service for generating knowledge points using DeepSeek API
 import json
 import time
 import uuid
-from typing import List, Optional
+from typing import List, Optional, Dict, Any, AsyncGenerator
 import aiohttp
 import asyncio
 from pydantic import BaseModel, Field
@@ -475,6 +475,270 @@ class AIService:
             logger.error(f"[{request_id}] Error parsing AI response: {e}")
             logger.error(f"[{request_id}] Exception type: {type(e).__name__}")
             raise
+
+    async def stream_chat_response(
+        self,
+        messages: List[Dict[str, str]],
+        request_id: str = None,
+        temperature: float = 0.7,
+        max_tokens: int = 4000
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """
+        流式聊天响应
+
+        Args:
+            messages: 对话消息列表
+            request_id: 请求ID
+            temperature: 温度参数
+            max_tokens: 最大token数
+
+        Yields:
+            Dict[str, Any]: 包含流式响应数据的字典
+        """
+        if not request_id:
+            request_id = str(uuid.uuid4())[:8]
+
+        start_time = time.time()
+
+        logger.info(f"[{request_id}] Starting stream chat response")
+        logger.info(f"[{request_id}] Messages count: {len(messages)}")
+        logger.debug(f"[{request_id}] Last user message: {messages[-1]['content'][:100] if messages and messages[-1].get('content') else 'None'}...")
+
+        try:
+            # 准备API请求
+            url = f"{self.api_base}/chat/completions"
+            payload = {
+                "model": self.model,
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "stream": True,  # 启用流式响应
+                "thinking": {
+                    "type": "enabled"  # 启用思考过程流式输出
+                }
+            }
+
+            logger.info(f"[{request_id}] Stream API request - Model: {payload['model']}, Stream: True, Thinking: stream")
+            logger.debug(f"[{request_id}] Request payload prepared")
+
+            # 进行流式请求
+            timeout = aiohttp.ClientTimeout(total=300)  # 5分钟超时，适合流式响应
+
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                request_start = time.time()
+                async with session.post(url, headers=self.headers, json=payload) as response:
+                    request_time = time.time() - request_start
+
+                    logger.info(f"[{request_id}] Stream connection established in {request_time:.3f}s")
+                    logger.debug(f"[{request_id}] Response status: {response.status}")
+
+                    if response.status != 200:
+                        error_text = await response.text()
+                        logger.error(f"[{request_id}] Stream API error {response.status}: {error_text}")
+                        yield {
+                            "type": "error",
+                            "data": {
+                                "error": f"API error {response.status}: {error_text[:200]}"
+                            }
+                        }
+                        return
+
+                    # 处理流式响应
+                    buffer = ""
+                    chunk_count = 0
+                    reasoning_content = ""
+                    message_content = ""
+
+                    logger.info(f"[{request_id}] Starting to process stream chunks")
+
+                    async for chunk in response.content.iter_chunked(1024):
+                        chunk_count += 1
+                        chunk_text = chunk.decode('utf-8', errors='ignore')
+                        buffer += chunk_text
+
+                        # 按行处理SSE数据
+                        while '\n' in buffer:
+                            line, buffer = buffer.split('\n', 1)
+                            line = line.strip()
+
+                            if not line or not line.startswith('data: '):
+                                continue
+
+                            # 移除'data: '前缀
+                            json_str = line[6:]
+
+                            # 检查是否是结束标记
+                            if json_str == '[DONE]':
+                                logger.info(f"[{request_id}] Stream completed - Total chunks: {chunk_count}")
+                                yield {
+                                    "type": "done",
+                                    "data": {
+                                        "reasoning": reasoning_content,
+                                        "content": message_content,
+                                        "total_time": time.time() - start_time
+                                    }
+                                }
+                                return
+
+                            try:
+                                # 解析JSON数据
+                                data = json.loads(json_str)
+
+                                # 检查是否包含选择
+                                if 'choices' in data and data['choices']:
+                                    choice = data['choices'][0]
+
+                                    # 处理思考过程 (reasoning)
+                                    if 'reasoning' in choice:
+                                        reasoning_delta = choice['reasoning'].get('content', '')
+                                        if reasoning_delta:
+                                            reasoning_content += reasoning_delta
+                                            logger.debug(f"[{request_id}] Reasoning chunk: {len(reasoning_delta)} chars")
+                                            yield {
+                                                "type": "reasoning",
+                                                "data": {
+                                                    "reasoning": reasoning_delta,
+                                                    "full_reasoning": reasoning_content
+                                                }
+                                            }
+
+                                    # 处理普通消息内容
+                                    if 'delta' in choice:
+                                        delta = choice['delta']
+                                        if 'content' in delta and delta['content']:
+                                            content_delta = delta['content']
+                                            message_content += content_delta
+                                            logger.debug(f"[{request_id}] Content chunk: {len(content_delta)} chars")
+                                            yield {
+                                                "type": "content",
+                                                "data": {
+                                                    "content": content_delta,
+                                                    "full_content": message_content
+                                                }
+                                            }
+
+                                    # 检查是否有完成的消息
+                                    if 'message' in choice:
+                                        message = choice['message']
+                                        if message.get('content'):
+                                            # 尝试解析知识点JSON
+                                            try:
+                                                knowledge_points = self._extract_knowledge_points_from_content(message['content'])
+                                                if knowledge_points:
+                                                    logger.info(f"[{request_id}] Extracted {len(knowledge_points)} knowledge points")
+                                                    yield {
+                                                        "type": "knowledge_points",
+                                                        "data": {
+                                                            "knowledge_points": knowledge_points,
+                                                            "content": message['content']
+                                                        }
+                                                    }
+                                            except Exception as e:
+                                                logger.warning(f"[{request_id}] Failed to parse knowledge points: {e}")
+
+                            except json.JSONDecodeError as e:
+                                logger.warning(f"[{request_id}] Failed to parse JSON chunk: {e}")
+                                logger.debug(f"[{request_id}] Invalid JSON: {json_str[:200]}...")
+                                continue
+                            except Exception as e:
+                                logger.error(f"[{request_id}] Error processing stream chunk: {e}")
+                                continue
+
+        except asyncio.TimeoutError:
+            total_time = time.time() - start_time
+            logger.error(f"[{request_id}] Stream timeout after {total_time:.3f}s")
+            yield {
+                "type": "error",
+                "data": {
+                    "error": "Request timeout"
+                }
+            }
+        except Exception as e:
+            total_time = time.time() - start_time
+            logger.error(f"[{request_id}] Stream chat error after {total_time:.3f}s: {str(e)}")
+            logger.error(f"[{request_id}] Exception type: {type(e).__name__}")
+            yield {
+                "type": "error",
+                "data": {
+                    "error": str(e)
+                }
+            }
+
+    def _extract_knowledge_points_from_content(self, content: str) -> Optional[List[Dict[str, Any]]]:
+        """从内容中提取知识点JSON"""
+        try:
+            # 尝试找到JSON内容
+            start_idx = content.find('{')
+            end_idx = content.rfind('}') + 1
+
+            if start_idx == -1 or end_idx == 0:
+                return None
+
+            json_content = content[start_idx:end_idx]
+            parsed_data = json.loads(json_content)
+
+            if "knowledge_points" in parsed_data:
+                return parsed_data["knowledge_points"]
+
+            return None
+
+        except (json.JSONDecodeError, Exception):
+            return None
+
+    async def generate_initial_knowledge_points(
+        self,
+        extracted_text: str,
+        max_points: int = 10,
+        user_requirements: Optional[str] = None,
+        request_id: str = None
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """
+        生成初始知识点（流式）
+
+        Args:
+            extracted_text: 提取的文档文本
+            max_points: 最大知识点数量
+            user_requirements: 用户要求
+            request_id: 请求ID
+        """
+        if not request_id:
+            request_id = str(uuid.uuid4())[:8]
+
+        logger.info(f"[{request_id}] Generating initial knowledge points (streaming)")
+        logger.info(f"[{request_id}] Text length: {len(extracted_text)} chars, Max points: {max_points}")
+
+        # 准备消息
+        system_prompt = self._create_extraction_system_prompt()
+
+        # 添加行号到文本
+        lines = extracted_text.split('\n')
+        numbered_text = '\n'.join(f"{i+1:3d}: {line}" for i, line in enumerate(lines))
+
+        user_content = f"""
+文档内容（带行号）：
+{numbered_text[:8000]}  # 限制长度避免token超限
+
+请分析这个文档并生成 {max_points} 个数学知识点。"""
+
+        if user_requirements:
+            user_content += f"\n\n用户特殊要求：\n{user_requirements}"
+
+        user_content += "\n\n请先展示你的分析思考过程，然后提供JSON格式的知识点结果。"
+
+        messages = [
+            {
+                "role": "system",
+                "content": system_prompt
+            },
+            {
+                "role": "user",
+                "content": user_content
+            }
+        ]
+
+        # 使用流式聊天方法
+        async for chunk in self.stream_chat_response(messages, request_id):
+            yield chunk
 
 
 def create_ai_service() -> AIService:

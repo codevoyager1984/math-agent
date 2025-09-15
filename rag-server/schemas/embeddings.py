@@ -184,3 +184,35 @@ class BatchKnowledgePointsResponse(BaseModel):
     total_count: int = Field(..., description="总数量")
     success_ids: List[str] = Field(..., description="成功添加的知识点ID列表")
     errors: List[str] = Field(default=[], description="错误信息列表")
+
+
+
+# 聊天会话相关的请求模型
+class ChatSessionCreateRequest(BaseModel):
+    """创建聊天会话请求"""
+    filename: str
+    extracted_text: str
+    max_documents: int = 10
+    user_requirements: Optional[str] = None
+
+
+class ChatSessionResponse(BaseModel):
+    """聊天会话响应"""
+    session_id: str
+    filename: str
+    created_at: str
+    status: str
+
+
+class ChatMessageRequest(BaseModel):
+    """聊天消息请求"""
+    message: str
+    message_type: str = "text"  # "text" | "initial_generation"
+
+
+class DocumentParseSessionResponse(BaseModel):
+    """文档解析会话响应（简化版）"""
+    session_id: str
+    filename: str
+    extracted_text_preview: str  # 文本预览（前2000字符）
+

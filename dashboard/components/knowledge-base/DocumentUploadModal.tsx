@@ -30,8 +30,9 @@ import {
   IconRefresh,
 } from '@tabler/icons-react';
 import { toast } from 'sonner';
-import { parseDocument, DocumentParseResponse } from '@/api/knowledge';
+import { parseDocumentAndCreateSession, DocumentParseSessionResponse, DocumentInput } from '@/api/knowledge';
 import KnowledgePointPreview from './KnowledgePointPreview';
+import DocumentChatInterface from './DocumentChatInterface';
 
 interface DocumentUploadModalProps {
   opened: boolean;
@@ -58,9 +59,11 @@ export default function DocumentUploadModal({
   const [userRequirements, setUserRequirements] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [parseResult, setParseResult] = useState<DocumentParseResponse | null>(null);
+  const [sessionResult, setSessionResult] = useState<DocumentParseSessionResponse | null>(null);
+  const [showChatInterface, setShowChatInterface] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
-  const [hasParseResult, setHasParseResult] = useState(false);
+  const [finalKnowledgePoints, setFinalKnowledgePoints] = useState<DocumentInput[]>([]);
+  const [hasSessionCreated, setHasSessionCreated] = useState(false);
 
   const handleClose = useCallback(() => {
     setFile(null);
@@ -68,9 +71,11 @@ export default function DocumentUploadModal({
     setUserRequirements('');
     setUploading(false);
     setUploadProgress(0);
-    setParseResult(null);
+    setSessionResult(null);
+    setShowChatInterface(false);
     setShowPreview(false);
-    setHasParseResult(false);
+    setFinalKnowledgePoints([]);
+    setHasSessionCreated(false);
     onClose();
   }, [onClose]);
 
@@ -125,65 +130,39 @@ export default function DocumentUploadModal({
         });
       }, 200);
 
-      const result = await parseDocument(file, maxKnowledgePoints, userRequirements);
-      
+      const result = await parseDocumentAndCreateSession(file, maxKnowledgePoints, userRequirements);
+
       clearInterval(progressInterval);
       setUploadProgress(100);
 
-      // 显示结果
-      setParseResult(result);
-      setShowPreview(true);
-      setHasParseResult(true);
-      
-      toast.success(`成功解析文档，生成了 ${result.total_points} 个知识点`);
+      // 保存会话结果并跳转到聊天界面
+      setSessionResult(result);
+      setShowChatInterface(true);
+      setHasSessionCreated(true);
+
+      toast.success('文档上传成功，正在进入AI分析界面...');
 
     } catch (error) {
-      console.error('文档解析失败:', error);
-      toast.error('文档解析失败，请重试');
+      console.error('文档上传失败:', error);
+      toast.error('文档上传失败，请重试');
     } finally {
       setUploading(false);
       setTimeout(() => setUploadProgress(0), 1000);
     }
   };
 
-  const handleReparse = async () => {
-    if (!file) {
-      toast.error('没有可重新解析的文件');
-      return;
-    }
+  // 处理聊天界面生成的知识点
+  const handleKnowledgePointsReady = useCallback((knowledgePoints: DocumentInput[]) => {
+    setFinalKnowledgePoints(knowledgePoints);
+    setShowChatInterface(false);
+    setShowPreview(true);
+  }, []);
 
-    try {
-      setUploading(true);
-      setUploadProgress(0);
-      setShowPreview(false);
-
-      // 模拟上传进度
-      const progressInterval = setInterval(() => {
-        setUploadProgress((prev) => {
-          if (prev >= 90) return prev;
-          return prev + Math.random() * 15;
-        });
-      }, 200);
-
-      const result = await parseDocument(file, maxKnowledgePoints, userRequirements);
-      
-      clearInterval(progressInterval);
-      setUploadProgress(100);
-
-      // 显示结果
-      setParseResult(result);
-      setShowPreview(true);
-      
-      toast.success(`重新解析完成，生成了 ${result.total_points} 个知识点`);
-
-    } catch (error) {
-      console.error('重新解析失败:', error);
-      toast.error('重新解析失败，请重试');
-    } finally {
-      setUploading(false);
-      setTimeout(() => setUploadProgress(0), 1000);
-    }
-  };
+  // 处理聊天界面关闭
+  const handleChatInterfaceClose = useCallback(() => {
+    setShowChatInterface(false);
+    // 不重置其他状态，允许用户重新打开聊天界面
+  }, []);
 
   const getFileIcon = (fileName: string) => {
     const name = fileName.toLowerCase();
@@ -205,7 +184,7 @@ export default function DocumentUploadModal({
   return (
     <>
       <Modal
-        opened={opened && !showPreview}
+        opened={opened && !showPreview && !showChatInterface}
         onClose={handleClose}
         title={
           <Group gap="sm">
@@ -284,9 +263,9 @@ export default function DocumentUploadModal({
                     <Text size="xs" c="dimmed">
                       文件大小: {formatFileSize(file.size)}
                     </Text>
-                    {hasParseResult && parseResult && (
+                    {hasSessionCreated && (
                       <Text size="xs" c="blue" fw={500}>
-                        已解析：{parseResult.total_points} 个知识点
+                        已创建会话，可进入AI分析
                       </Text>
                     )}
                   </Stack>
@@ -294,9 +273,9 @@ export default function DocumentUploadModal({
                     <Badge color="green" variant="light">
                       ✓ 已选择
                     </Badge>
-                    {hasParseResult && (
+                    {hasSessionCreated && (
                       <Badge color="blue" variant="light">
-                        已解析
+                        已上传
                       </Badge>
                     )}
                   </Stack>
@@ -304,11 +283,11 @@ export default function DocumentUploadModal({
               </Alert>
             )}
 
-            {/* 重新解析提示 */}
-            {hasParseResult && (
+            {/* AI分析提示 */}
+            {hasSessionCreated && (
               <Alert icon={<IconInfoCircle size={16} />} color="blue" variant="light">
                 <Text size="sm">
-                  📝 您可以修改参数或要求，然后点击"重新解析"来获得不同的知识点提取结果
+                  🤖 文档已上传成功！您可以点击"进入AI分析"开始与AI对话来生成知识点，或修改参数重新上传
                 </Text>
               </Alert>
             )}
@@ -348,25 +327,25 @@ export default function DocumentUploadModal({
               </Button>
               
               <Group gap="sm">
-                {hasParseResult && (
+                {hasSessionCreated && (
                   <Button
-                    variant="light"
+                    variant="gradient"
+                    gradient={{ from: 'blue', to: 'cyan' }}
                     leftSection={<IconRefresh size={16} />}
-                    onClick={handleReparse}
-                    disabled={!file || uploading}
-                    loading={uploading}
+                    onClick={() => setShowChatInterface(true)}
+                    disabled={!sessionResult}
                   >
-                    重新解析
+                    进入AI分析
                   </Button>
                 )}
-                
+
                 <Button
                   leftSection={<IconUpload size={16} />}
                   onClick={handleUpload}
                   disabled={!file || uploading}
                   loading={uploading}
                 >
-                  {hasParseResult ? '解析' : '开始解析'}
+                  {hasSessionCreated ? '重新上传' : '上传文档'}
                 </Button>
               </Group>
             </Group>
@@ -374,17 +353,29 @@ export default function DocumentUploadModal({
         </div>
       </Modal>
 
+      {/* AI聊天分析界面 */}
+      {sessionResult && (
+        <DocumentChatInterface
+          opened={showChatInterface}
+          onClose={handleChatInterfaceClose}
+          sessionId={sessionResult.session_id}
+          filename={sessionResult.filename}
+          extractedTextPreview={sessionResult.extracted_text_preview}
+          onKnowledgePointsReady={handleKnowledgePointsReady}
+        />
+      )}
+
       {/* 知识点预览模态框 */}
-      {parseResult && (
+      {finalKnowledgePoints.length > 0 && sessionResult && (
         <KnowledgePointPreview
           opened={showPreview}
           onClose={() => {
             setShowPreview(false);
             handleClose();
           }}
-          filename={parseResult.filename}
-          extractedText={parseResult.extracted_text}
-          knowledgePoints={parseResult.knowledge_points}
+          filename={sessionResult.filename}
+          extractedText={sessionResult.extracted_text_preview}
+          knowledgePoints={finalKnowledgePoints}
           onSuccess={onSuccess}
         />
       )}

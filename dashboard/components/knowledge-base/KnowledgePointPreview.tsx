@@ -26,7 +26,7 @@ import {
   IconUpload,
 } from '@tabler/icons-react';
 import { toast } from 'sonner';
-import { KnowledgePointInput, batchAddKnowledgePoints, BatchKnowledgePointsResponse } from '@/api/knowledge';
+import { DocumentInput, batchAddKnowledgePoints, BatchKnowledgePointsResponse } from '@/api/knowledge';
 import { CATEGORY_OPTIONS } from '@/constants/categories';
 import EditableKnowledgePointCard from './EditableKnowledgePointCard';
 
@@ -35,7 +35,7 @@ interface KnowledgePointPreviewProps {
   onClose: () => void;
   filename: string;
   extractedText: string;
-  knowledgePoints: KnowledgePointInput[];
+  knowledgePoints: DocumentInput[];
   onSuccess: () => void;
 }
 
@@ -48,7 +48,7 @@ export default function KnowledgePointPreview({
   knowledgePoints: initialKnowledgePoints,
   onSuccess,
 }: KnowledgePointPreviewProps) {
-  const [knowledgePoints, setKnowledgePoints] = useState<KnowledgePointInput[]>(initialKnowledgePoints);
+  const [knowledgePoints, setKnowledgePoints] = useState<DocumentInput[]>(initialKnowledgePoints);
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(
     new Set(initialKnowledgePoints.map((_, i) => i))
   );
@@ -85,7 +85,7 @@ export default function KnowledgePointPreview({
     setSelectedIndices(new Set());
   }, []);
 
-  const handleUpdateKnowledgePoint = useCallback((index: number, updated: KnowledgePointInput) => {
+  const handleUpdateKnowledgePoint = useCallback((index: number, updated: DocumentInput) => {
     setKnowledgePoints((prev) => {
       const newPoints = [...prev];
       newPoints[index] = updated;
@@ -269,7 +269,7 @@ export default function KnowledgePointPreview({
           <Alert icon={<IconInfoCircle size={16} />} color="gray">
             <Stack gap="xs">
               <Text size="sm" fw={500}>提取的文本内容：</Text>
-              <ScrollArea h={200}>
+              <ScrollArea>
                 <Text size="xs" style={{ whiteSpace: 'pre-wrap' }}>
                   {extractedText}
                 </Text>
