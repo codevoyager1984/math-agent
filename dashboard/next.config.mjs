@@ -30,6 +30,7 @@ export default withBundleAnalyzer({
   },
   async rewrites() {
     const ragServerUrl = process.env.RAG_SERVER_URL || 'http://localhost:8000';
+    console.log('ragServerUrl', ragServerUrl);
     return [
       {
         source: '/api/:path*',

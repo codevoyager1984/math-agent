@@ -47,7 +47,7 @@ export function KnowledgeTooltip({ knowledgeId, displayText }: KnowledgeTooltipP
     setError(null);
 
     try {
-      const ragServerUrl = process.env.NEXT_PUBLIC_RAG_SERVER_URL || 'http://localhost:8000';
+      const ragServerUrl = process.env.RAG_SERVER_URL || 'http://45.78.228.239:18080';
       const response = await fetch(`${ragServerUrl}/api/knowledge-base/documents/${id}`);
       
       if (!response.ok) {
