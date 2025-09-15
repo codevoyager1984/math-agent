@@ -58,6 +58,10 @@ export default function KnowledgeBasePage() {
   const [selectedKnowledge, setSelectedKnowledge] = useState<KnowledgePoint | null>(null);
   const [collectionInfo, setCollectionInfo] = useState<any>(null);
 
+  // 搜索状态管理
+  const [isSearchMode, setIsSearchMode] = useState(false);
+  const [lastSearchQuery, setLastSearchQuery] = useState('');
+
   // 混合搜索状态 - 从 localStorage 初始化
   const [searchMode, setSearchMode] = useState<'vector' | 'text' | 'hybrid'>('hybrid');
   const [vectorWeight, setVectorWeight] = useState(0.6);
@@ -95,15 +99,40 @@ export default function KnowledgeBasePage() {
     }
   }, [searchMode, vectorWeight, textWeight, enableRerank, rerankTopK, isConfigLoaded]);
 
-  // 获取知识点列表
-  const fetchKnowledgePoints = useCallback(async () => {
+  // 获取知识点列表（默认列表，不包含搜索）
+  const fetchKnowledgePointsList = useCallback(async () => {
     try {
       setLoading(true);
 
-      // 如果有搜索关键词，使用智能搜索
-      if (search.trim()) {
+      // 使用传统的分页获取
+      const params: KnowledgePointListParams = {
+        page,
+        limit: RECORDS_PER_PAGE,
+      };
+
+      if (categoryFilter !== 'all') {
+        params.category = categoryFilter;
+      }
+
+      const response = await getKnowledgePoints(params);
+      setKnowledgePoints(response.knowledge_points);
+      setTotalRecords(response.total);
+    } catch (error) {
+      console.error('获取知识点列表失败:', error);
+      toast.error('获取知识点列表失败');
+    } finally {
+      setLoading(false);
+    }
+  }, [page, categoryFilter]);
+
+  // 执行搜索
+  const executeSearch = useCallback(async (searchQuery: string) => {
+    try {
+      setLoading(true);
+
+      if (searchQuery.trim()) {
         const queryParams: QueryParams = {
-          query: search.trim(),
+          query: searchQuery.trim(),
           n_results: RECORDS_PER_PAGE,
           search_mode: searchMode,
           vector_weight: vectorWeight,
@@ -136,27 +165,16 @@ export default function KnowledgeBasePage() {
         setKnowledgePoints(knowledgePointResults);
         setTotalRecords(knowledgePointResults.length);
       } else {
-        // 没有搜索关键词，使用传统的分页获取
-        const params: KnowledgePointListParams = {
-          page,
-          limit: RECORDS_PER_PAGE,
-        };
-
-        if (categoryFilter !== 'all') {
-          params.category = categoryFilter;
-        }
-
-        const response = await getKnowledgePoints(params);
-        setKnowledgePoints(response.knowledge_points);
-        setTotalRecords(response.total);
+        // 如果搜索词为空，回到正常列表
+        await fetchKnowledgePointsList();
       }
     } catch (error) {
-      console.error('获取知识点列表失败:', error);
-      toast.error('获取知识点列表失败');
+      console.error('搜索失败:', error);
+      toast.error('搜索失败');
     } finally {
       setLoading(false);
     }
-  }, [page, search, categoryFilter, searchMode, vectorWeight, textWeight, enableRerank, rerankTopK]);
+  }, [searchMode, vectorWeight, textWeight, enableRerank, rerankTopK, categoryFilter, fetchKnowledgePointsList]);
 
   // 获取集合信息
   const fetchCollectionInfo = useCallback(async () => {
@@ -168,25 +186,42 @@ export default function KnowledgeBasePage() {
     }
   }, []);
 
-  // 初始加载和依赖更新时获取数据
+  // 初始加载和分页、分类变化时获取数据（非搜索模式）
   useEffect(() => {
-    fetchKnowledgePoints();
-  }, [fetchKnowledgePoints]);
+    if (!isSearchMode) {
+      fetchKnowledgePointsList();
+    }
+  }, [fetchKnowledgePointsList, isSearchMode]);
 
   useEffect(() => {
     fetchCollectionInfo();
   }, [fetchCollectionInfo]);
 
   // 搜索处理
-  const handleSearch = () => {
-    setPage(1); // 重置到第一页
+  const handleSearch = async () => {
+    const query = search.trim();
+    if (query) {
+      setIsSearchMode(true);
+      setLastSearchQuery(query);
+      setPage(1); // 重置到第一页
+      await executeSearch(query);
+    } else {
+      // 如果搜索词为空，退出搜索模式
+      setIsSearchMode(false);
+      setLastSearchQuery('');
+      setPage(1);
+      await fetchKnowledgePointsList();
+    }
   };
 
   // 重置搜索
-  const handleReset = () => {
+  const handleReset = async () => {
     setSearch('');
     setCategoryFilter('all');
+    setIsSearchMode(false);
+    setLastSearchQuery('');
     setPage(1);
+    await fetchKnowledgePointsList();
   };
 
   // 重置配置到默认值
@@ -230,7 +265,12 @@ export default function KnowledgeBasePage() {
         try {
           await deleteKnowledgePoint(knowledgePoint.id);
           toast.success('知识点删除成功');
-          fetchKnowledgePoints(); // 刷新列表
+          // 根据当前模式刷新列表
+          if (isSearchMode && lastSearchQuery) {
+            executeSearch(lastSearchQuery);
+          } else {
+            fetchKnowledgePointsList();
+          }
           fetchCollectionInfo(); // 刷新集合信息
         } catch (error) {
           console.error('删除知识点失败:', error);
@@ -260,7 +300,12 @@ export default function KnowledgeBasePage() {
         try {
           await clearKnowledgeBase();
           toast.success('知识库清空成功');
-          fetchKnowledgePoints(); // 刷新列表
+          // 根据当前模式刷新列表
+          if (isSearchMode && lastSearchQuery) {
+            executeSearch(lastSearchQuery);
+          } else {
+            fetchKnowledgePointsList();
+          }
           fetchCollectionInfo(); // 刷新集合信息
         } catch (error) {
           console.error('清空知识库失败:', error);
@@ -272,7 +317,12 @@ export default function KnowledgeBasePage() {
 
   // 文档上传成功处理
   const handleUploadSuccess = () => {
-    fetchKnowledgePoints(); // 刷新列表
+    // 根据当前模式刷新列表
+    if (isSearchMode && lastSearchQuery) {
+      executeSearch(lastSearchQuery);
+    } else {
+      fetchKnowledgePointsList();
+    }
     fetchCollectionInfo(); // 刷新集合信息
     closeUpload();
   };
@@ -320,7 +370,7 @@ export default function KnowledgeBasePage() {
             >
               创建知识点
             </Button>
-            <Button 
+            <Button
               leftSection={<IconFileUpload size={16} />}
               onClick={openUpload}
               variant="gradient"
@@ -328,14 +378,20 @@ export default function KnowledgeBasePage() {
             >
               上传文档
             </Button>
-            <Button 
+            <Button
               variant="light"
               leftSection={<IconRefresh size={16} />}
-              onClick={fetchKnowledgePoints}
+              onClick={() => {
+                if (isSearchMode && lastSearchQuery) {
+                  executeSearch(lastSearchQuery);
+                } else {
+                  fetchKnowledgePointsList();
+                }
+              }}
             >
               刷新
             </Button>
-            <Button 
+            <Button
               variant="outline"
               color="red"
               leftSection={<IconTrash size={16} />}
