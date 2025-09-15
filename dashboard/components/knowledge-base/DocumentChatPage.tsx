@@ -252,17 +252,20 @@ export default function DocumentChatPage({
             console.log('First 500 chars:', sessionData.extracted_text.substring(0, 500));
           } else {
             console.warn('No extracted_text in session data, using preview');
+            setFullExtractedText(extractedTextPreview);
           }
         } else {
           console.error('Failed to fetch session data:', response.status);
+          setFullExtractedText(extractedTextPreview);
         }
       } catch (error) {
         console.warn('Failed to fetch session data:', error);
+        setFullExtractedText(extractedTextPreview);
       }
     };
-    
+
     fetchSessionData();
-  }, [sessionId]);
+  }, [sessionId, extractedTextPreview]);
 
   // 处理流式数据块
   const handleStreamChunk = useCallback((chunk: StreamChunk) => {
@@ -288,15 +291,16 @@ export default function DocumentChatPage({
           if (lastMessage && lastMessage.role === 'assistant') {
             const newContent = chunk.data.full_content || (lastMessage.content + chunk.data.content);
             lastMessage.content = newContent;
-            
-            // 检测是否开始生成JSON（只在第一次检测到时触发）
-            if (newContent.includes('```json') && !isGeneratingJson) {
-              setIsGeneratingJson(true);
-              console.log('Detected JSON generation start');
-            }
           }
           return newMessages;
         });
+
+        // 检测是否开始生成JSON（只在第一次检测到时触发）
+        const contentToCheck = chunk.data.full_content || chunk.data.content || '';
+        if (contentToCheck.includes('```json') && !isGeneratingJson) {
+          setIsGeneratingJson(true);
+          console.log('Detected JSON generation start');
+        }
         break;
 
       case 'knowledge_points':
@@ -335,7 +339,6 @@ export default function DocumentChatPage({
                               lastMessage.content.match(/\{[\s\S]*"knowledge_points"[\s\S]*\}/);
               if (jsonMatch) {
                 const jsonContent = JSON.parse(jsonMatch[1] || jsonMatch[0]);
-                let positionData = null;
                 
                 // 处理不同的JSON格式
                 let rawData = null;
@@ -344,33 +347,40 @@ export default function DocumentChatPage({
                 } else if (jsonContent.knowledge_points && Array.isArray(jsonContent.knowledge_points)) {
                   rawData = jsonContent.knowledge_points;
                 }
-                
+
                 if (rawData && rawData.length > 0) {
                   console.log('Extracted raw data:', JSON.stringify(rawData, null, 2));
-                  
+
                   // 检查数据格式：是位置信息还是直接内容
                   const firstItem = rawData[0];
                   const isPositionFormat = firstItem.description_range || firstItem.examples?.some((ex: any) => ex.question_range || ex.solution_range);
-                  
+
                   console.log('Is position format:', isPositionFormat);
-                  
+
                   let knowledgePointsArray: DocumentInput[] = [];
                   
                   if (isPositionFormat) {
                     // 位置信息格式，需要解析行号
                     console.log('Using position-based parsing');
+
+                    // 确保使用最新的完整文本，如果还没加载完成则使用预览文本
+                    const textToUse = fullExtractedText && fullExtractedText.length > 0 ? fullExtractedText : extractedTextPreview;
+                    console.log('Text to use length:', textToUse.length);
                     console.log('Full extracted text length:', fullExtractedText.length);
                     console.log('Preview text length:', extractedTextPreview.length);
-                    console.log('Are they the same?', fullExtractedText === extractedTextPreview);
-                    
+
                     // 显示文本的前几行和后几行
-                    const lines = fullExtractedText.split('\n');
-                    console.log('Total lines in full text:', lines.length);
+                    const lines = textToUse.split('\n');
+                    console.log('Total lines in text:', lines.length);
                     console.log('First 5 lines:', lines.slice(0, 5));
-                    console.log('Lines 110-115:', lines.slice(109, 115));
-                    console.log('Lines 220-230:', lines.slice(219, 230));
-                    
-                    knowledgePointsArray = parseKnowledgePointsFromPositions(fullExtractedText, rawData);
+                    if (lines.length > 110) {
+                      console.log('Lines 110-115:', lines.slice(109, 115));
+                    }
+                    if (lines.length > 220) {
+                      console.log('Lines 220-230:', lines.slice(219, 230));
+                    }
+
+                    knowledgePointsArray = parseKnowledgePointsFromPositions(textToUse, rawData);
                   } else {
                     // 直接内容格式，直接使用
                     console.log('Using direct content format');
@@ -418,7 +428,7 @@ export default function DocumentChatPage({
         });
         break;
     }
-  }, []);
+  }, [fullExtractedText, extractedTextPreview, isGeneratingJson]);
 
   // 开始初始知识点生成
   const startInitialGeneration = useCallback(async () => {
@@ -601,15 +611,6 @@ export default function DocumentChatPage({
     }
   }, [inputMessage, sessionId, isStreaming, handleStreamChunk]);
 
-  // 确认知识点
-  const handleConfirmKnowledgePoints = useCallback(() => {
-    if (currentKnowledgePoints.length > 0) {
-      onKnowledgePointsReady(currentKnowledgePoints);
-      router.push('/dashboard/knowledge-base');
-    } else {
-      toast.error('还没有生成知识点');
-    }
-  }, [currentKnowledgePoints, onKnowledgePointsReady, router]);
 
   // 处理键盘事件
   const handleKeyPress = useCallback((event: React.KeyboardEvent) => {
