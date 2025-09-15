@@ -60,7 +60,10 @@ class AIService:
                     }
                 ],
                 "temperature": temperature,
-                "max_tokens": max_tokens
+                "max_tokens": max_tokens,
+                "thinking": {
+                    "type": "disabled"
+                }
             }
             
             # Make API request
@@ -76,6 +79,7 @@ class AIService:
                     
                     response_data = await response.json()
                     logger.info(f"[{request_id}] API call completed in {api_time:.3f}s")
+                    logger.info(f"[{request_id}] API response: {response_data}")
             
             # Extract response text
             if 'choices' not in response_data or not response_data['choices']:

@@ -788,6 +788,7 @@ class RAGService:
                     return DocumentResult(
                         id=chroma_doc["id"],
                         content=chroma_doc["content"],
+                        distance=0.0,  # 精确匹配，距离为0
                         metadata=chroma_doc["metadata"],
                         similarity_score=100.0  # 精确匹配给满分
                     )
@@ -804,6 +805,7 @@ class RAGService:
                     return DocumentResult(
                         id=es_doc["id"],
                         content=es_doc["content"],
+                        distance=0.0,  # 精确匹配，距离为0
                         metadata=es_doc["metadata"],
                         similarity_score=100.0  # 精确匹配给满分
                     )

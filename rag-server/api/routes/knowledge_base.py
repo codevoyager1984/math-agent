@@ -335,6 +335,7 @@ async def get_knowledge_point(document_id: str):
     """
     try:
         # 直接通过ID获取文档
+        print(f"document_id: {document_id}")
         result = await rag_service.get_document_by_id(
             document_id=document_id,
             request_id=document_id[:8]  # 使用文档ID的前8位作为请求ID
