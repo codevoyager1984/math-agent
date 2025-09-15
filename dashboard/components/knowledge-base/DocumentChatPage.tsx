@@ -31,6 +31,7 @@ import {
   IconSparkles,
   IconArrowLeft,
   IconHome,
+  IconFileText,
 } from '@tabler/icons-react';
 import { toast } from 'sonner';
 import { DocumentInput } from '@/api/knowledge';
@@ -42,6 +43,7 @@ interface DocumentChatPageProps {
   filename: string;
   extractedTextPreview: string;
   onKnowledgePointsReady: (knowledgePoints: DocumentInput[]) => void;
+  onShowDocumentViewer?: () => void;
 }
 
 interface ChatMessage {
@@ -202,6 +204,7 @@ export default function DocumentChatPage({
   filename,
   extractedTextPreview,
   onKnowledgePointsReady,
+  onShowDocumentViewer,
 }: DocumentChatPageProps) {
   const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -641,9 +644,23 @@ export default function DocumentChatPage({
         <Stack gap="lg">
         {/* 页面头部 */}
         <div>
-          <Breadcrumbs separator=">" mb="sm">
-            {breadcrumbItems}
-          </Breadcrumbs>
+          <Group justify="space-between" align="center" mb="sm">
+            <Breadcrumbs separator=">">
+              {breadcrumbItems}
+            </Breadcrumbs>
+            {onShowDocumentViewer && (
+              <Tooltip label="查看完整文档内容">
+                <Button
+                  variant="light"
+                  size="sm"
+                  leftSection={<IconFileText size={16} />}
+                  onClick={onShowDocumentViewer}
+                >
+                  查看文档
+                </Button>
+              </Tooltip>
+            )}
+          </Group>
         </div>
 
         {/* 提取文本预览 */}
@@ -878,52 +895,6 @@ export default function DocumentChatPage({
                   ))}
                 </Stack>
               </ScrollArea>
-
-              {/* 当前知识点状态 */}
-              {currentKnowledgePoints.length > 0 && (
-                <Alert 
-                  icon={<IconSparkles size={16} />} 
-                  color="blue"
-                  style={{ 
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    border: '1px solid var(--mantine-color-blue-3)'
-                  }}
-                  onClick={() => setShowKnowledgePreview(true)}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--mantine-color-blue-1)';
-                    e.currentTarget.style.transform = 'translateY(-1px)';
-                    e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.1)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = '';
-                    e.currentTarget.style.transform = '';
-                    e.currentTarget.style.boxShadow = '';
-                  }}
-                >
-                  <Group justify="space-between" align="center">
-                    <Group gap="sm">
-                      <Text size="sm" fw={500}>
-                        已生成 {currentKnowledgePoints.length} 个知识点
-                      </Text>
-                      <Badge variant="light" color="green" size="sm">
-                        点击编辑和导入
-                      </Badge>
-                    </Group>
-                    <Button 
-                      size="xs" 
-                      variant="light" 
-                      color="blue"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowKnowledgePreview(true);
-                      }}
-                    >
-                      查看详情
-                    </Button>
-                  </Group>
-                </Alert>
-              )}
 
               <Divider />
 

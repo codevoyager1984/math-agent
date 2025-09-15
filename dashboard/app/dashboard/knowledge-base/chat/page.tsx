@@ -5,6 +5,8 @@ import { useEffect, useState } from 'react';
 import DocumentChatPage from '@/components/knowledge-base/DocumentChatPage';
 import { DocumentInput } from '@/api/knowledge';
 import KnowledgePointPreview from '@/components/knowledge-base/KnowledgePointPreview';
+import { Button, Modal, ScrollArea, Text, Group, ActionIcon, Tooltip } from '@mantine/core';
+import { IconEye, IconEyeOff, IconFileText } from '@tabler/icons-react';
 
 export default function ChatPage() {
   const searchParams = useSearchParams();
@@ -12,6 +14,7 @@ export default function ChatPage() {
   const [showPreview, setShowPreview] = useState(false);
   const [knowledgePoints, setKnowledgePoints] = useState<DocumentInput[]>([]);
   const [fullExtractedText, setFullExtractedText] = useState<string>('');
+  const [showDocumentViewer, setShowDocumentViewer] = useState(false);
   
   const sessionId = searchParams.get('sessionId');
   const filename = searchParams.get('filename');
@@ -64,6 +67,14 @@ export default function ChatPage() {
     router.push('/dashboard/knowledge-base');
   };
 
+  const handleShowDocumentViewer = () => {
+    setShowDocumentViewer(true);
+  };
+
+  const handleCloseDocumentViewer = () => {
+    setShowDocumentViewer(false);
+  };
+
   if (!sessionId || !filename) {
     return null; // 或者显示加载状态
   }
@@ -75,6 +86,7 @@ export default function ChatPage() {
         filename={decodeURIComponent(filename)}
         extractedTextPreview={preview ? decodeURIComponent(preview) : ''}
         onKnowledgePointsReady={handleKnowledgePointsReady}
+        onShowDocumentViewer={handleShowDocumentViewer}
       />
       
       {/* 知识点预览模态框 */}
@@ -88,6 +100,41 @@ export default function ChatPage() {
           onSuccess={handleSuccess}
         />
       )}
+
+      {/* 文档查看器模态框 */}
+      <Modal
+        opened={showDocumentViewer}
+        onClose={handleCloseDocumentViewer}
+        title={
+          <Group gap="sm">
+            <IconFileText size={20} />
+            <Text fw={500}>文档完整内容</Text>
+          </Group>
+        }
+        size="xl"
+        centered
+        styles={{
+          body: { padding: 0 },
+          header: { padding: 'var(--mantine-spacing-md)' }
+        }}
+      >
+        <ScrollArea h={600} p="md">
+          <Text
+            size="sm"
+            style={{
+              whiteSpace: 'pre-wrap',
+              lineHeight: 1.6,
+              fontFamily: 'monospace',
+              backgroundColor: 'var(--mantine-color-gray-0)',
+              padding: 'var(--mantine-spacing-md)',
+              borderRadius: 'var(--mantine-radius-md)',
+              border: '1px solid var(--mantine-color-gray-3)'
+            }}
+          >
+            {fullExtractedText || '正在加载文档内容...'}
+          </Text>
+        </ScrollArea>
+      </Modal>
     </>
   );
 }
