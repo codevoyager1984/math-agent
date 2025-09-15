@@ -5,7 +5,7 @@
 import asyncio
 import time
 import uuid
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Dict, Any, Optional
 from sentence_transformers import CrossEncoder
 from loguru import logger
 
@@ -211,8 +211,18 @@ class RerankService:
         for result in vector_results:
             doc_id = result.get("id")
             if doc_id:
-                # 将距离转换为相似度分数 (1 - distance)
-                vector_score = 1.0 - result.get("distance", 1.0)
+                # 将距离转换为相似度分数
+                # ChromaDB 默认使用 L2 距离，范围是 0 到无穷大，其中 0 表示完全相同
+                # 使用指数衰减转换为相似度分数: exp(-distance)
+                distance = result.get("distance", float('inf'))
+                if distance == 0:
+                    vector_score = 1.0
+                elif distance == float('inf'):
+                    vector_score = 0.0
+                else:
+                    # 使用指数衰减，距离越大相似度越小
+                    import math
+                    vector_score = math.exp(-abs(distance))
                 vector_score = max(0.0, min(1.0, vector_score))  # 限制在0-1之间
 
                 merged_results[doc_id] = {
@@ -242,7 +252,16 @@ class RerankService:
                     if score_range > 0:
                         normalized_score = (raw_score - min_text_score) / score_range
                     else:
-                        normalized_score = 1.0 if raw_score > 0 else 0.0
+                        # 当所有分数相同时，使用原始分数的相对强度
+                        # 使用对数缩放来避免满分，并保持合理的分数分布
+                        if raw_score > 0:
+                            # 将 Elasticsearch 分数转换为 0-1 相似度分数
+                            # 使用更严格的缩放函数，让低分更低，高分更高
+                            # 使用调整后的 sigmoid: 1/(1+exp(-(x-1.5)*2))
+                            # 这样只有分数>1.5时才能得到>50%的归一化分数
+                            normalized_score = 1.0 / (1.0 + math.exp(-(raw_score - 1.5) * 2))
+                        else:
+                            normalized_score = 0.0
 
                     if doc_id in merged_results:
                         merged_results[doc_id]["text_score"] = normalized_score

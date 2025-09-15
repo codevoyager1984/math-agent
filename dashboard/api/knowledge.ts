@@ -108,6 +108,7 @@ export interface QueryResult {
   fusion_score?: number;
   rerank_score?: number;
   final_score?: number;
+  similarity_score?: number; // 统一的相似度分数(0-100)
   highlight?: Record<string, any>;
 }
 

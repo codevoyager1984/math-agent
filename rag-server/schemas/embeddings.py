@@ -56,6 +56,7 @@ class DocumentResult(BaseModel):
     fusion_score: Optional[float] = Field(default=None, description="融合分数")
     rerank_score: Optional[float] = Field(default=None, description="重排序分数")
     final_score: Optional[float] = Field(default=None, description="最终分数")
+    similarity_score: Optional[float] = Field(default=None, description="统一的相似度分数(0-100)")
     highlight: Optional[Dict[str, Any]] = Field(default=None, description="高亮信息")
 
 
@@ -76,6 +77,7 @@ class RankedDocumentResult(BaseModel):
     fusion_score: Optional[float] = Field(default=None, description="融合分数")
     rerank_score: Optional[float] = Field(default=None, description="重排序分数")
     final_score: Optional[float] = Field(default=None, description="最终分数")
+    similarity_score: Optional[float] = Field(default=None, description="统一的相似度分数(0-100)")
 
     # 元数据
     search_metadata: Optional[Dict[str, Any]] = Field(default=None, description="搜索元数据")

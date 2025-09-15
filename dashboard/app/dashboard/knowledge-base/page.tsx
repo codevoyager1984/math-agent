@@ -155,7 +155,8 @@ export default function KnowledgeBasePage() {
             tags: metadata.tags || [],
             created_at: metadata.created_at,
             updated_at: metadata.updated_at,
-            similarity_score: result.final_score || result.vector_score || (1 - result.distance),
+            // 使用后端统一计算的相似度分数
+            similarity_score: result.similarity_score || 0,
           } as KnowledgePoint;
         }).filter(kp => {
           // 应用分类过滤

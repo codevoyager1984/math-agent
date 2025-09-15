@@ -2,6 +2,7 @@
 RAG 主服务模块
 整合嵌入向量服务、ChromaDB 服务、Elasticsearch 服务和重排序服务，提供高层次的 RAG 功能
 """
+import math
 import time
 import uuid
 from typing import List, Dict, Any, Optional
@@ -27,6 +28,75 @@ class RAGService:
         self.elasticsearch_service = elasticsearch_service
         self.rerank_service = rerank_service
         self.collection_name = "math_knowledge"
+    
+    def _calculate_similarity_score(self, result: Dict[str, Any], search_mode: str) -> float:
+        """
+        统一计算相似度分数 (0-100 范围)
+        
+        Args:
+            result: 包含各种分数的结果字典
+            search_mode: 搜索模式 ('vector', 'text', 'hybrid')
+            
+        Returns:
+            统一的相似度分数 (0-100)
+        """
+        # 1. 如果有重排序分数，优先使用（已经是最优化的分数）
+        if result.get("rerank_score") is not None:
+            # rerank_score 通常范围较大，需要适当缩放
+            rerank_score = result["rerank_score"]
+            if rerank_score > 10:  # 如果分数很大，使用对数缩放
+                similarity = min(100, (math.log(rerank_score + 1) / math.log(11)) * 100)
+            else:
+                similarity = min(100, rerank_score * 20)  # 假设rerank_score范围0-5
+            return max(0, similarity)
+        
+        # 2. 如果有final_score，使用它
+        if result.get("final_score") is not None:
+            final_score = result["final_score"]
+            if final_score > 10:
+                similarity = min(100, (math.log(final_score + 1) / math.log(11)) * 100)
+            else:
+                similarity = min(100, final_score * 20)
+            return max(0, similarity)
+        
+        # 3. 根据搜索模式选择合适的分数
+        if search_mode == 'hybrid' and result.get("fusion_score") is not None:
+            # 混合搜索模式：使用融合分数 (通常0-1范围)
+            return max(0, min(100, result["fusion_score"] * 100))
+        
+        if search_mode == 'text' and result.get("text_score") is not None:
+            # 文本搜索模式：使用文本分数 (通常0-1范围)
+            return max(0, min(100, result["text_score"] * 100))
+        
+        if search_mode == 'vector' and result.get("vector_score") is not None:
+            # 向量搜索模式：使用向量分数 (通常0-1范围)
+            return max(0, min(100, result["vector_score"] * 100))
+        
+        # 4. 回退到可用的分数
+        if result.get("fusion_score") is not None:
+            return max(0, min(100, result["fusion_score"] * 100))
+        
+        if result.get("vector_score") is not None and result["vector_score"] > 0:
+            return max(0, min(100, result["vector_score"] * 100))
+        
+        if result.get("text_score") is not None and result["text_score"] > 0:
+            return max(0, min(100, result["text_score"] * 100))
+        
+        # 5. 最后使用距离转换（改进的转换公式）
+        if result.get("distance") is not None:
+            # ChromaDB L2距离转换为相似度分数
+            distance = abs(result["distance"])
+            if distance == 0:
+                return 100
+            if distance == float('inf'):
+                return 0
+            
+            # 使用高斯衰减，sigma参数控制衰减速度
+            sigma = 1.5  # 可根据实际效果调整
+            similarity = math.exp(-(distance * distance) / (2 * sigma * sigma))
+            return max(0, min(100, similarity * 100))
+        
+        return 0
     
     async def add_documents(
         self,
@@ -161,11 +231,18 @@ class RAGService:
                 metadatas = results.get("metadatas", [[]])[0] if (include_metadata and results.get("metadatas")) else [None] * len(ids)
                 
                 for i, doc_id in enumerate(ids):
+                    # 创建临时结果字典用于计算相似度分数
+                    temp_result = {
+                        "distance": distances[i] if i < len(distances) else 0.0,
+                    }
+                    similarity_score = self._calculate_similarity_score(temp_result, "vector")
+                    
                     document_result = DocumentResult(
                         id=doc_id,
                         content=documents[i] if i < len(documents) else "",
                         distance=distances[i] if i < len(distances) else 0.0,
-                        metadata=metadatas[i] if i < len(metadatas) else None
+                        metadata=metadatas[i] if i < len(metadatas) else None,
+                        similarity_score=similarity_score
                     )
                     document_results.append(document_result)
             
@@ -318,6 +395,9 @@ class RAGService:
             # 转换为响应格式
             response_results = []
             for result in final_results:
+                # 计算统一的相似度分数
+                similarity_score = self._calculate_similarity_score(result, request.search_mode)
+                
                 ranked_result = RankedDocumentResult(
                     id=result["id"],
                     title=result.get("title"),
@@ -332,6 +412,7 @@ class RAGService:
                     fusion_score=result.get("fusion_score"),
                     rerank_score=result.get("rerank_score"),
                     final_score=result.get("final_score"),
+                    similarity_score=similarity_score,
                     search_metadata=result.get("hybrid_metadata"),
                     highlight=result.get("highlight")
                 )
@@ -397,13 +478,21 @@ class RAGService:
                 # 转换为增强格式
                 enhanced_results = []
                 for result in response.results:
+                    # 创建临时结果字典用于计算相似度分数
+                    temp_result = {
+                        "distance": result.distance,
+                        "vector_score": math.exp(-abs(result.distance)) if result.distance != float('inf') else 0.0,
+                    }
+                    similarity_score = self._calculate_similarity_score(temp_result, "vector")
+                    
                     enhanced_result = DocumentResult(
                         id=result.id,
                         content=result.content,
                         distance=result.distance,
                         metadata=result.metadata,
-                        vector_score=1.0 - result.distance if result.distance <= 1.0 else 0.0,
-                        final_score=1.0 - result.distance if result.distance <= 1.0 else 0.0
+                        vector_score=math.exp(-abs(result.distance)) if result.distance != float('inf') else 0.0,
+                        final_score=math.exp(-abs(result.distance)) if result.distance != float('inf') else 0.0,
+                        similarity_score=similarity_score
                     )
                     enhanced_results.append(enhanced_result)
 
@@ -455,6 +544,7 @@ class RAGService:
                         fusion_score=ranked_result.fusion_score,
                         rerank_score=ranked_result.rerank_score,
                         final_score=ranked_result.final_score,
+                        similarity_score=ranked_result.similarity_score,
                         highlight=ranked_result.highlight
                     )
                     standard_results.append(standard_result)
@@ -659,7 +749,8 @@ class RAGService:
                     return DocumentResult(
                         id=chroma_doc["id"],
                         content=chroma_doc["content"],
-                        metadata=chroma_doc["metadata"]
+                        metadata=chroma_doc["metadata"],
+                        similarity_score=100.0  # 精确匹配给满分
                     )
 
             except Exception as e:
@@ -674,7 +765,8 @@ class RAGService:
                     return DocumentResult(
                         id=es_doc["id"],
                         content=es_doc["content"],
-                        metadata=es_doc["metadata"]
+                        metadata=es_doc["metadata"],
+                        similarity_score=100.0  # 精确匹配给满分
                     )
 
             except Exception as e:

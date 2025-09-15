@@ -90,12 +90,18 @@ export default function KnowledgePointCard({ knowledgePoint, onView, onEdit, onD
           </Badge>
           {/* 显示相似度分数（仅在搜索时显示） */}
           {knowledgePoint.similarity_score !== undefined && knowledgePoint.similarity_score !== null && (
-            <Badge 
-              variant="gradient" 
-              gradient={{ from: 'orange', to: 'red', deg: 45 }}
+            <Badge
+              variant="gradient"
+              gradient={
+                knowledgePoint.similarity_score >= 80
+                  ? { from: 'green', to: 'teal', deg: 45 }
+                  : knowledgePoint.similarity_score >= 60
+                  ? { from: 'yellow', to: 'orange', deg: 45 }
+                  : { from: 'orange', to: 'red', deg: 45 }
+              }
               size="sm"
             >
-              相似度 {knowledgePoint.similarity_score.toFixed(1)}%
+              匹配度 {knowledgePoint.similarity_score.toFixed(1)}%
             </Badge>
           )}
         </Group>

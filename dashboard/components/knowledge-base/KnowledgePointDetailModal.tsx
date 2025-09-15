@@ -99,6 +99,37 @@ export default function KnowledgePointDetailModal({
           </Grid.Col>
         </Grid>
 
+        {/* 搜索相关信息（仅在搜索结果中显示） */}
+        {knowledgePoint.similarity_score !== undefined && knowledgePoint.similarity_score !== null && (
+          <>
+            <Divider />
+            <Box>
+              <Text size="sm" fw={500} mb="sm">搜索匹配信息</Text>
+              <Card withBorder p="md">
+                <Group justify="space-between" align="center">
+                  <Text size="sm" c="dimmed">匹配度评分</Text>
+                  <Badge
+                    size="lg"
+                    variant="gradient"
+                    gradient={
+                      knowledgePoint.similarity_score >= 80
+                        ? { from: 'green', to: 'teal', deg: 45 }
+                        : knowledgePoint.similarity_score >= 60
+                        ? { from: 'yellow', to: 'orange', deg: 45 }
+                        : { from: 'orange', to: 'red', deg: 45 }
+                    }
+                  >
+                    {knowledgePoint.similarity_score.toFixed(2)}%
+                  </Badge>
+                </Group>
+                <Text size="xs" c="dimmed" mt="xs">
+                  基于语义相似度和文本匹配计算的综合评分
+                </Text>
+              </Card>
+            </Box>
+          </>
+        )}
+
         {knowledgePoint.examples.length > 0 && (
           <>
             <Divider />
