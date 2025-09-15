@@ -7,6 +7,7 @@ import {
   Text,
   FileInput,
   NumberInput,
+  Textarea,
   Alert,
   Progress,
   LoadingOverlay,
@@ -53,6 +54,7 @@ export default function DocumentUploadModal({
 }: DocumentUploadModalProps) {
   const [file, setFile] = useState<File | null>(null);
   const [maxKnowledgePoints, setMaxKnowledgePoints] = useState(10);
+  const [userRequirements, setUserRequirements] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [parseResult, setParseResult] = useState<DocumentParseResponse | null>(null);
@@ -61,6 +63,7 @@ export default function DocumentUploadModal({
   const handleClose = useCallback(() => {
     setFile(null);
     setMaxKnowledgePoints(10);
+    setUserRequirements('');
     setUploading(false);
     setUploadProgress(0);
     setParseResult(null);
@@ -119,7 +122,7 @@ export default function DocumentUploadModal({
         });
       }, 200);
 
-      const result = await parseDocument(file, maxKnowledgePoints);
+      const result = await parseDocument(file, maxKnowledgePoints, userRequirements);
       
       clearInterval(progressInterval);
       setUploadProgress(100);
@@ -245,6 +248,18 @@ export default function DocumentUploadModal({
                 </Group>
               </Alert>
             )}
+
+            {/* 用户要求 */}
+            <Textarea
+              label="额外要求（可选）"
+              description="您可以在此输入对知识点提取的特殊要求，例如：重点关注某个概念、特定的难度等级、或其他定制化需求"
+              placeholder="例如：重点提取关于二次函数的例题，难度偏向中等..."
+              value={userRequirements}
+              onChange={(event) => setUserRequirements(event.currentTarget.value)}
+              minRows={3}
+              maxRows={5}
+              disabled={uploading}
+            />
 
             {/* 参数设置 */}
             <NumberInput

@@ -109,29 +109,22 @@ class LLMRerankService:
 
 请严格按照以下JSON格式返回结果：
 ```json
-{{
-  "results": [
-    {{
-      "id": 1,
-      "similarity_score": 85,
-      "reason": "文档内容与查询高度相关的具体原因"
-    }},
-    {{
-      "id": 2, 
-      "similarity_score": 65,
-      "reason": "文档内容与查询相关的具体原因"
-    }}
-  ],
-  "total_filtered": 2,
-  "explanation": "整体评估说明"
-}}
+[
+  {{
+    "id": 1,
+    "score": 85
+  }},
+  {{
+    "id": 2, 
+    "score": 65
+  }}
+]
 ```
 
 注意:
 - 只包含相似度≥20的文档
 - 按相似度从高到低排序
-- reason字段简洁说明相关性原因
-- 如果所有文档相似度都<20，返回空的results数组"""
+- 如果所有文档相似度都<20，返回空数组"""
 
         return prompt
 
@@ -166,11 +159,17 @@ class LLMRerankService:
         
         try:
             # 1. 准备文档数据
+            prep_start = time.time()
             simplified_docs = self._prepare_documents_for_llm(candidates)
+            prep_time = time.time() - prep_start
+            logger.info(f"[{request_id}] Document preparation completed in {prep_time:.3f}s")
             logger.debug(f"[{request_id}] Prepared {len(simplified_docs)} simplified documents")
             
             # 2. 创建提示词
+            prompt_start = time.time()
             prompt = self._create_rerank_prompt(query, simplified_docs)
+            prompt_time = time.time() - prompt_start
+            logger.info(f"[{request_id}] Prompt creation completed in {prompt_time:.3f}s")
             logger.debug(f"[{request_id}] Created rerank prompt ({len(prompt)} chars)")
             
             # 3. 调用大模型
@@ -185,11 +184,13 @@ class LLMRerankService:
                 logger.info(f"[{request_id}] LLM call completed in {llm_time:.3f}s")
                 
             except Exception as e:
-                logger.error(f"[{request_id}] LLM call failed: {e}")
+                llm_time = time.time() - llm_start
+                logger.error(f"[{request_id}] LLM call failed after {llm_time:.3f}s: {e}")
                 # 如果大模型调用失败，返回原始顺序
                 return candidates[:top_k] if top_k else candidates
             
             # 4. 解析大模型响应
+            parse_start = time.time()
             try:
                 # 提取JSON部分
                 response_text = response.strip()
@@ -202,28 +203,35 @@ class LLMRerankService:
                     json_text = response_text
                 
                 llm_result = json.loads(json_text)
+                parse_time = time.time() - parse_start
+                logger.info(f"[{request_id}] Response parsing completed in {parse_time:.3f}s")
                 logger.debug(f"[{request_id}] Successfully parsed LLM response")
                 
+                # 确保结果是数组格式
+                if not isinstance(llm_result, list):
+                    logger.error(f"[{request_id}] Expected array but got {type(llm_result)}")
+                    return candidates[:top_k] if top_k else candidates
+                
             except json.JSONDecodeError as e:
-                logger.error(f"[{request_id}] Failed to parse LLM response as JSON: {e}")
+                parse_time = time.time() - parse_start
+                logger.error(f"[{request_id}] Failed to parse LLM response as JSON after {parse_time:.3f}s: {e}")
                 logger.debug(f"[{request_id}] Raw response: {response[:500]}...")
                 # 解析失败时返回原始顺序
                 return candidates[:top_k] if top_k else candidates
             
             # 5. 构建重排序结果
+            build_start = time.time()
             reranked_results = []
             id_to_candidate = {i+1: candidates[i] for i in range(len(candidates))}
             
-            for result in llm_result.get("results", []):
+            for result in llm_result:
                 doc_id = result.get("id")
-                similarity_score = result.get("similarity_score", 0)
-                reason = result.get("reason", "")
+                score = result.get("score", 0)
                 
-                if doc_id in id_to_candidate and similarity_score >= 20:
+                if doc_id in id_to_candidate and score >= 20:
                     original_candidate = id_to_candidate[doc_id].copy()
-                    original_candidate["rerank_score"] = float(similarity_score)
-                    original_candidate["llm_similarity_score"] = float(similarity_score)
-                    original_candidate["rerank_reason"] = reason
+                    original_candidate["rerank_score"] = float(score)
+                    original_candidate["llm_similarity_score"] = float(score)
                     original_candidate["rerank_method"] = "llm"
                     
                     reranked_results.append(original_candidate)
@@ -232,15 +240,16 @@ class LLMRerankService:
             if top_k is not None:
                 reranked_results = reranked_results[:top_k]
             
+            build_time = time.time() - build_start
+            logger.info(f"[{request_id}] Result building completed in {build_time:.3f}s")
+            
             total_time = time.time() - start_time
-            filtered_count = len(llm_result.get("results", []))
+            filtered_count = len(llm_result)
             final_count = len(reranked_results)
             
             logger.info(f"[{request_id}] LLM rerank completed in {total_time:.3f}s")
             logger.info(f"[{request_id}] Results: {len(candidates)} → {filtered_count} filtered → {final_count} final")
-            
-            if "explanation" in llm_result:
-                logger.debug(f"[{request_id}] LLM explanation: {llm_result['explanation']}")
+            logger.info(f"[{request_id}] Timing breakdown - Prep: {prep_time:.3f}s, Prompt: {prompt_time:.3f}s, LLM: {llm_time:.3f}s, Parse: {parse_time:.3f}s, Build: {build_time:.3f}s")
             
             return reranked_results
             
@@ -263,8 +272,7 @@ class LLMRerankService:
             "features": [
                 "semantic_understanding",
                 "relevance_filtering", 
-                "similarity_scoring",
-                "reasoning_explanation"
+                "similarity_scoring"
             ]
         }
 

@@ -196,10 +196,14 @@ export interface BatchKnowledgePointsResponse {
 // 解析文档生成知识点预览
 export const parseDocument = async (
   file: File, 
-  maxDocuments: number = 10
+  maxDocuments: number = 10,
+  userRequirements: string = ''
 ): Promise<DocumentParseResponse> => {
   const formData = new FormData();
   formData.append('file', file);
+  if (userRequirements.trim()) {
+    formData.append('user_requirements', userRequirements);
+  }
   
   return await request<DocumentParseResponse>({
     url: `/knowledge-base/upload-document?max_documents=${maxDocuments}`,

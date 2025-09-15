@@ -5,7 +5,7 @@ from datetime import datetime
 import json
 import traceback
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, status, Query, File, UploadFile
+from fastapi import APIRouter, HTTPException, status, Query, File, UploadFile, Form
 from fastapi.responses import JSONResponse
 import logging
 
@@ -531,13 +531,15 @@ async def delete_knowledge_point(document_id: str):
 )
 async def parse_document(
     file: UploadFile = File(...),
-    max_documents: int = Query(10, ge=1, le=20, description="最大文档数量")
+    max_documents: int = Query(10, ge=1, le=20, description="最大文档数量"),
+    user_requirements: Optional[str] = Form(None, description="用户对知识点提取的额外要求")
 ):
     """
     解析文档生成知识点预览
     
     - **file**: 上传的文档文件（支持 PDF, DOCX, TXT, MD 格式）
     - **max_documents**: 最大生成文档数量
+    - **user_requirements**: 用户对知识点提取的额外要求（可选）
     """
     # Generate request ID for tracking the entire flow
     import uuid
@@ -549,6 +551,7 @@ async def parse_document(
     logger.info(f"[{request_id}] Document parsing request started")
     logger.info(f"[{request_id}] File: {file.filename}, Content-Type: {file.content_type}")
     logger.info(f"[{request_id}] Max documents: {max_documents}")
+    logger.info(f"[{request_id}] User requirements: {user_requirements or 'None'}")
     
     try:
         # 检查文件类型
@@ -603,7 +606,8 @@ async def parse_document(
         ai_service = get_ai_service()
         knowledge_points_data = await ai_service.generate_knowledge_points(
             extracted_text, 
-            max_points=max_documents
+            max_points=max_documents,
+            user_requirements=user_requirements
         )
         ai_time = time.time() - ai_start
         logger.info(f"[{request_id}] AI processing completed in {ai_time:.3f}s")

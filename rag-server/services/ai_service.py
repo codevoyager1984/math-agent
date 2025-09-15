@@ -95,7 +95,7 @@ class AIService:
             logger.error(f"[{request_id}] Text generation failed after {total_time:.3f}s: {str(e)}")
             raise
 
-    async def generate_knowledge_points(self, text: str, max_points: int = 10) -> List[KnowledgePointData]:
+    async def generate_knowledge_points(self, text: str, max_points: int = 10, user_requirements: Optional[str] = None) -> List[KnowledgePointData]:
         """Generate knowledge points from text using AI model"""
         # Generate request ID for tracking
         request_id = str(uuid.uuid4())[:8]
@@ -104,13 +104,14 @@ class AIService:
         logger.info(f"[{request_id}] Starting knowledge point generation")
         logger.info(f"[{request_id}] Input text length: {len(text)} characters")
         logger.info(f"[{request_id}] Max knowledge points: {max_points}")
+        logger.info(f"[{request_id}] User requirements: {user_requirements or 'None'}")
         logger.info(f"[{request_id}] Document text: {text}")
         
         try:
             # Prepare the prompt for knowledge point extraction
             logger.debug(f"[{request_id}] Creating extraction prompt")
             prompt_start = time.time()
-            prompt = self._create_extraction_prompt(text, max_points)
+            prompt = self._create_extraction_prompt(text, max_points, user_requirements)
             prompt_time = time.time() - prompt_start
             logger.debug(f"[{request_id}] Prompt created in {prompt_time:.3f}s (length: {len(prompt)} chars)")
             
@@ -141,7 +142,7 @@ class AIService:
             logger.error(f"[{request_id}] Exception type: {type(e).__name__}")
             raise
     
-    def _create_extraction_prompt(self, text: str, max_points: int) -> str:
+    def _create_extraction_prompt(self, text: str, max_points: int, user_requirements: Optional[str] = None) -> str:
         """Create a structured prompt for knowledge point extraction"""
         prompt = f"""
 你是一个数学知识专家，需要从给定的文档中智能提取数学知识点。
@@ -172,7 +173,10 @@ class AIService:
 - 根据内容提取多个独立知识点（不超过{max_points}个）
 - 每个知识点应该是完整且独立的概念
 
-【第三步：输出格式】
+【第三步：用户特殊要求】
+{self._format_user_requirements(user_requirements)}
+
+【第四步：输出格式】
 按以下JSON格式输出：
 {{
   "document_type": "complete_tutorial|mixed_content",
@@ -204,12 +208,117 @@ class AIService:
 8. 数学公式和符号必须完全按照原文格式保留
 9. category字段必须使用预定义的英文分类值，不要使用中文或其他自定义分类
 
+【JSON格式要求】
+10. 必须输出标准的JSON格式，确保所有字符串正确转义
+11. 数学公式中的反斜杠必须双重转义，例如：\\\\frac、\\\\sqrt、\\\\dots、\\\\times等
+12. 换行符使用\\n表示，制表符使用\\t表示
+13. 所有双引号在字符串内部必须转义为\\"
+14. JSON结构必须完整且语法正确，避免任何解析错误
+
 文档内容：
 {text}
 
 请直接输出JSON：
 """
         return prompt
+    
+    def _format_user_requirements(self, user_requirements: Optional[str]) -> str:
+        """Format user requirements for inclusion in the prompt"""
+        if not user_requirements or not user_requirements.strip():
+            return "用户未提供特殊要求，按照标准流程提取知识点。"
+        
+        return f"""用户提出了以下特殊要求，请在提取知识点时重点关注：
+
+{user_requirements.strip()}
+
+请确保在提取知识点时充分考虑这些要求，并在适当的地方体现用户的需求。"""
+    
+    def _fix_latex_escapes(self, json_content: str) -> str:
+        """Fix common LaTeX escape sequences that cause JSON parsing errors"""
+        import re
+        
+        # Common LaTeX commands that cause JSON escape issues
+        latex_fixes = [
+            # Fix \dots, \ldots, \cdots etc.
+            (r'\\dots', r'\\\\dots'),
+            (r'\\ldots', r'\\\\ldots'),
+            (r'\\cdots', r'\\\\cdots'),
+            (r'\\vdots', r'\\\\vdots'),
+            (r'\\ddots', r'\\\\ddots'),
+            
+            # Fix common math symbols
+            (r'\\times', r'\\\\times'),
+            (r'\\div', r'\\\\div'),
+            (r'\\pm', r'\\\\pm'),
+            (r'\\mp', r'\\\\mp'),
+            
+            # Fix Greek letters
+            (r'\\alpha', r'\\\\alpha'),
+            (r'\\beta', r'\\\\beta'),
+            (r'\\gamma', r'\\\\gamma'),
+            (r'\\delta', r'\\\\delta'),
+            (r'\\epsilon', r'\\\\epsilon'),
+            (r'\\theta', r'\\\\theta'),
+            (r'\\lambda', r'\\\\lambda'),
+            (r'\\mu', r'\\\\mu'),
+            (r'\\pi', r'\\\\pi'),
+            (r'\\sigma', r'\\\\sigma'),
+            (r'\\phi', r'\\\\phi'),
+            (r'\\omega', r'\\\\omega'),
+            
+            # Fix common functions
+            (r'\\sin', r'\\\\sin'),
+            (r'\\cos', r'\\\\cos'),
+            (r'\\tan', r'\\\\tan'),
+            (r'\\log', r'\\\\log'),
+            (r'\\ln', r'\\\\ln'),
+            (r'\\exp', r'\\\\exp'),
+            
+            # Fix fractions and roots
+            (r'\\frac', r'\\\\frac'),
+            (r'\\sqrt', r'\\\\sqrt'),
+            
+            # Fix set notation
+            (r'\\in', r'\\\\in'),
+            (r'\\notin', r'\\\\notin'),
+            (r'\\subset', r'\\\\subset'),
+            (r'\\supset', r'\\\\supset'),
+            
+            # Fix inequalities
+            (r'\\leq', r'\\\\leq'),
+            (r'\\geq', r'\\\\geq'),
+            (r'\\neq', r'\\\\neq'),
+            
+            # Fix arrows
+            (r'\\to', r'\\\\to'),
+            (r'\\rightarrow', r'\\\\rightarrow'),
+            (r'\\leftarrow', r'\\\\leftarrow'),
+            
+            # Fix other common symbols
+            (r'\\infty', r'\\\\infty'),
+            (r'\\sum', r'\\\\sum'),
+            (r'\\prod', r'\\\\prod'),
+            (r'\\int', r'\\\\int'),
+            (r'\\lim', r'\\\\lim'),
+            
+            # Fix text commands
+            (r'\\text', r'\\\\text'),
+            (r'\\mathrm', r'\\\\mathrm'),
+            (r'\\mathbf', r'\\\\mathbf'),
+            (r'\\mathit', r'\\\\mathit'),
+        ]
+        
+        # Apply all fixes
+        for pattern, replacement in latex_fixes:
+            # Only fix if it's within a string value (between quotes)
+            # This prevents fixing LaTeX in JSON keys
+            json_content = re.sub(
+                r'("(?:[^"\\]|\\.)*?)' + pattern + r'((?:[^"\\]|\\.)*?")',
+                r'\1' + replacement + r'\2',
+                json_content
+            )
+        
+        return json_content
     
     async def _call_ai_api(self, prompt: str, request_id: str) -> str:
         """Call AI API to generate content"""
@@ -254,11 +363,10 @@ class AIService:
                     result = await response.json()
             
             # Log response details
-            logger.debug(f"[{request_id}] Response JSON keys: {list(result.keys())}")
+            logger.debug(f"[{request_id}] LLM Response: {result}")
             
             if "choices" not in result or len(result["choices"]) == 0:
                 logger.error(f"[{request_id}] Invalid API response: no choices found")
-                logger.error(f"[{request_id}] Response: {result}")
                 raise Exception("No response from AI API")
             
             # Extract usage information if available
@@ -310,6 +418,11 @@ class AIService:
             json_content = response[start_idx:end_idx]
             logger.debug(f"[{request_id}] Extracted JSON content length: {len(json_content)} characters")
             logger.debug(f"[{request_id}] JSON content preview: {json_content[:200]}...")
+            
+            # Fix common LaTeX escape issues in JSON
+            # Replace problematic LaTeX commands that cause JSON parsing errors
+            json_content = self._fix_latex_escapes(json_content)
+            logger.debug(f"[{request_id}] Fixed LaTeX escapes in JSON content")
             
             # Parse JSON
             logger.debug(f"[{request_id}] Attempting to parse JSON")
