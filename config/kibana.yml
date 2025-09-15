@@ -1,0 +1,32 @@
+# Kibana 配置文件
+
+# 服务器配置
+server.name: math-agent-kibana
+server.host: 0.0.0.0
+server.port: 5601
+
+# Elasticsearch 连接配置
+elasticsearch.hosts: ["http://elasticsearch:9200"]
+
+# 安全配置 (开发环境)
+elasticsearch.username: ""
+elasticsearch.password: ""
+
+# 监控配置
+monitoring.ui.container.elasticsearch.enabled: false
+
+# 日志配置
+logging.appenders.file.type: file
+logging.appenders.file.fileName: /usr/share/kibana/logs/kibana.log
+logging.appenders.file.layout.type: json
+
+logging.root.level: info
+logging.root.appenders: [default, file]
+
+# 国际化配置
+i18n.locale: "zh-CN"
+
+# 安全策略
+csp.rules:
+  - "script-src 'unsafe-eval' 'self'"
+  - "worker-src blob: 'self'"

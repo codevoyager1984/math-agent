@@ -10,10 +10,11 @@ from fastapi.responses import JSONResponse
 import logging
 
 from schemas.embeddings import (
-    DocumentsAddRequest, ExampleInput, KnowledgePointAddRequest, QueryRequest, QueryResponse, 
-    CollectionInfo, AddDocumentInput, KnowledgePointResponse, 
+    DocumentsAddRequest, ExampleInput, KnowledgePointAddRequest, QueryRequest, QueryResponse,
+    CollectionInfo, AddDocumentInput, KnowledgePointResponse,
     KnowledgePointsResponse, DocumentParseRequest, DocumentParseResponse,
-    BatchKnowledgePointsRequest, BatchKnowledgePointsResponse
+    BatchKnowledgePointsRequest, BatchKnowledgePointsResponse,
+    HybridQueryRequest, HybridQueryResponse
 )
 from schemas.common import HealthCheck, ErrorResponse
 from services.rag_service import rag_service
@@ -98,9 +99,10 @@ async def add_document(request: AddDocumentInput):
             metadata=metadata
         )
         
-        # 添加到向量数据库
+        # 添加到双重存储系统（ChromaDB + Elasticsearch）
         success = await rag_service.add_documents(
             documents=[document],
+            request_id=knowledge_id[:8]  # 使用知识点ID的前8位作为请求ID
         )
         
         if success:
@@ -157,6 +159,49 @@ async def query_documents(request: QueryRequest):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"查询文档失败: {str(e)}"
+        )
+
+
+@router.post(
+    "/hybrid-query",
+    response_model=HybridQueryResponse,
+    summary="混合搜索文档",
+    description="结合向量搜索、全文搜索和重排序的高级查询"
+)
+async def hybrid_query_documents(request: HybridQueryRequest):
+    """
+    混合搜索文档
+
+    - **query**: 查询文本
+    - **n_results**: 返回结果数量，默认为 5，范围 1-20
+    - **include_metadata**: 是否包含元数据，默认为 True
+    - **search_mode**: 搜索模式 (vector/text/hybrid)
+    - **vector_weight**: 向量搜索权重
+    - **text_weight**: 文本搜索权重
+    - **enable_rerank**: 是否启用重排序
+    - **rerank_top_k**: 重排序后返回的top结果数量
+    """
+    # 生成请求ID用于追踪
+    request_id = str(uuid.uuid4())[:8]
+
+    try:
+        logger.info(f"[{request_id}] Hybrid query request: '{request.query[:50]}...'")
+        logger.info(f"[{request_id}] Search mode: {request.search_mode}, n_results: {request.n_results}")
+
+        response = await rag_service.hybrid_query_documents(
+            request=request,
+            request_id=request_id
+        )
+
+        logger.info(f"[{request_id}] Hybrid query completed successfully")
+        return response
+
+    except Exception as e:
+        logger.error(f"[{request_id}] Hybrid query failed: {e}")
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"混合搜索失败: {str(e)}"
         )
 
 
@@ -285,7 +330,9 @@ async def clear_knowledge_base():
     注意：此操作会删除所有知识点数据，不可恢复
     """
     try:
-        success = await rag_service.clear_knowledge_base()
+        success = await rag_service.clear_knowledge_base(
+            request_id=str(uuid.uuid4())[:8]
+        )
         
         if success:
             return {
@@ -447,10 +494,10 @@ async def update_knowledge_point(document_id: str, request: KnowledgePointAddReq
             metadata=metadata
         )
         
-        # 使用 upsert 更新或插入文档
+        # 使用 upsert 更新或插入文档到双重存储系统
         success = await rag_service.upsert_documents(
             documents=[document],
-            collection_name="math_knowledge"
+            request_id=document_id[:8]  # 使用文档ID的前8位作为请求ID
         )
         
         if success:
@@ -494,6 +541,7 @@ async def delete_knowledge_point(document_id: str):
     try:
         success = await rag_service.delete_documents(
             ids=[document_id],
+            request_id=document_id[:8]  # 使用文档ID的前8位作为请求ID
         )
         
         if success:
@@ -741,9 +789,10 @@ async def batch_add_documents(request: BatchKnowledgePointsRequest):
                     metadata=metadata
                 )
                 
-                # 添加到向量数据库
+                # 添加到双重存储系统（ChromaDB + Elasticsearch）
                 success = await rag_service.add_documents(
                     documents=[document],
+                    request_id=knowledge_id[:8]  # 使用知识点ID的前8位作为请求ID
                 )
                 
                 if success:

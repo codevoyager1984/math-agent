@@ -7,7 +7,7 @@ export interface Example {
   difficulty: 'easy' | 'medium' | 'hard';
 }
 
-export interface KnowledgePointInput {
+export interface DocumentInput {
   title: string;
   description: string;
   category?: string;
@@ -42,24 +42,20 @@ export interface KnowledgePointListParams {
 }
 
 // 添加知识点
-export const addKnowledgePoint = async (knowledgePoint: KnowledgePointInput): Promise<KnowledgePoint> => {
+export const addDocument = async (document: DocumentInput): Promise<KnowledgePoint> => {
   return await request<KnowledgePoint>({
     url: '/knowledge-base/documents',
     method: 'POST',
-    data: {
-      knowledge_point: knowledgePoint
-    },
+    data: document
   });
 };
 
 // 更新知识点
-export const updateKnowledgePoint = async (id: string, knowledgePoint: KnowledgePointInput): Promise<KnowledgePoint> => {
+export const updateKnowledgePoint = async (id: string, document: DocumentInput): Promise<KnowledgePoint> => {
   return await request<KnowledgePoint>({
     url: `/knowledge-base/documents/${id}`,
     method: 'PUT',
-    data: {
-      knowledge_point: knowledgePoint
-    },
+    data: document
   });
 };
 
@@ -121,7 +117,7 @@ export const clearKnowledgeBase = async (): Promise<void> => {
 export interface DocumentParseResponse {
   filename: string;
   extracted_text: string;
-  knowledge_points: KnowledgePointInput[];
+  knowledge_points: DocumentInput[];
   total_points: number;
 }
 
@@ -153,7 +149,7 @@ export const parseDocument = async (
 
 // 批量添加知识点
 export const batchAddKnowledgePoints = async (
-  knowledgePoints: KnowledgePointInput[]
+  knowledgePoints: DocumentInput[]
 ): Promise<BatchKnowledgePointsResponse> => {
   return await request<BatchKnowledgePointsResponse>({
     url: '/knowledge-base/batch-documents',

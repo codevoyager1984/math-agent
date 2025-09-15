@@ -1,13 +1,21 @@
 """
 RAG 主服务模块
-整合嵌入向量服务和 ChromaDB 服务，提供高层次的 RAG 功能
+整合嵌入向量服务、ChromaDB 服务、Elasticsearch 服务和重排序服务，提供高层次的 RAG 功能
 """
-from typing import List, Dict, Any
+import time
+import uuid
+from typing import List, Dict, Any, Optional
 
 from .embedding_service import embedding_service
 from .chroma_service import chroma_service
-from schemas.embeddings import DocumentInput, DocumentResult, QueryResponse
+from .elasticsearch_service import elasticsearch_service
+from .rerank_service import rerank_service
+from schemas.embeddings import (
+    DocumentInput, DocumentResult, QueryResponse,
+    HybridQueryRequest, HybridQueryResponse, RankedDocumentResult
+)
 from loguru import logger
+import asyncio
 
 class RAGService:
     """RAG 主服务类"""
@@ -16,53 +24,94 @@ class RAGService:
         """初始化 RAG 服务"""
         self.embedding_service = embedding_service
         self.chroma_service = chroma_service
+        self.elasticsearch_service = elasticsearch_service
+        self.rerank_service = rerank_service
         self.collection_name = "math_knowledge"
     
     async def add_documents(
         self,
         documents: List[DocumentInput],
+        request_id: Optional[str] = None
     ) -> bool:
         """
-        添加文档到知识库
-        
+        添加文档到知识库（双写到 ChromaDB 和 Elasticsearch）
+
         Args:
             documents: 文档列表
-            collection_name: 集合名称
-            
+            request_id: 请求ID用于追踪
+
         Returns:
             是否成功
         """
+        if not request_id:
+            request_id = str(uuid.uuid4())[:8]
+
         try:
             # 提取文档内容和元数据
             contents = [doc.content for doc in documents]
             ids = [doc.id for doc in documents]
             metadatas = [doc.metadata for doc in documents if doc.metadata]
-            
+
             # 如果没有元数据，设置为 None
             if not metadatas or len(metadatas) != len(documents):
                 metadatas = None
-            
+
             # 生成嵌入向量
-            logger.info(f"正在为 {len(documents)} 个文档生成嵌入向量...")
+            logger.info(f"[{request_id}] 正在为 {len(documents)} 个文档生成嵌入向量...")
             embeddings = await self.embedding_service.encode_batch(contents)
-            
-            # 存储到 ChromaDB
-            logger.info(f"正在将文档存储到集合 {self.collection_name}...")
-            success = await self.chroma_service.add_documents(
+
+            # 并行存储到 ChromaDB 和 Elasticsearch
+            logger.info(f"[{request_id}] 正在并行存储文档到 ChromaDB 和 Elasticsearch...")
+
+            chroma_task = self.chroma_service.add_documents(
                 collection_name=self.collection_name,
                 documents=contents,
                 ids=ids,
                 embeddings=embeddings,
                 metadatas=metadatas
             )
-            
-            if success:
-                logger.info(f"成功添加 {len(documents)} 个文档到知识库")
-            
-            return success
-            
+
+            es_task = self.elasticsearch_service.add_documents(
+                documents=documents,
+                request_id=request_id
+            )
+
+            # 等待两个存储操作完成
+            chroma_success, es_success = await asyncio.gather(
+                chroma_task, es_task, return_exceptions=True
+            )
+
+            # 检查结果
+            if isinstance(chroma_success, Exception):
+                logger.error(f"[{request_id}] ChromaDB 存储失败: {chroma_success}")
+                chroma_success = False
+
+            if isinstance(es_success, Exception):
+                logger.error(f"[{request_id}] Elasticsearch 存储失败: {es_success}")
+                es_success = False
+
+            # 如果任一存储失败，尝试回滚
+            if not chroma_success or not es_success:
+                logger.warning(f"[{request_id}] 存储失败，尝试回滚操作...")
+                if chroma_success and not es_success:
+                    # ChromaDB 成功但 ES 失败，删除 ChromaDB 中的文档
+                    await self.chroma_service.delete_documents(
+                        collection_name=self.collection_name,
+                        ids=ids
+                    )
+                elif es_success and not chroma_success:
+                    # ES 成功但 ChromaDB 失败，删除 ES 中的文档
+                    await self.elasticsearch_service.delete_documents(
+                        ids=ids,
+                        request_id=request_id
+                    )
+                return False
+
+            logger.info(f"[{request_id}] 成功添加 {len(documents)} 个文档到双重存储系统")
+            return True
+
         except Exception as e:
-            logger.error(f"添加文档到知识库失败: {e}")
+            logger.error(f"[{request_id}] 添加文档到知识库失败: {e}")
             raise
     
     async def query_documents(
@@ -132,81 +181,339 @@ class RAGService:
         except Exception as e:
             logger.error(f"查询文档失败: {e}")
             raise
+
+    async def hybrid_query_documents(
+        self,
+        request: HybridQueryRequest,
+        request_id: Optional[str] = None
+    ) -> HybridQueryResponse:
+        """
+        混合搜索文档（结合向量搜索、全文搜索和重排序）
+
+        Args:
+            request: 混合搜索请求
+            request_id: 请求ID用于追踪
+
+        Returns:
+            混合搜索响应
+        """
+        if not request_id:
+            request_id = str(uuid.uuid4())[:8]
+
+        start_time = time.time()
+        timing = {}
+        search_stats = {}
+
+        logger.info(f"[{request_id}] Starting hybrid search: '{request.query[:50]}...'")
+        logger.info(f"[{request_id}] Search mode: {request.search_mode}, n_results: {request.n_results}")
+
+        try:
+            vector_results = []
+            text_results = []
+
+            # 向量搜索
+            if request.search_mode in ["vector", "hybrid"]:
+                vector_start = time.time()
+                logger.info(f"[{request_id}] Performing vector search...")
+
+                vector_response = await self.query_documents(
+                    query=request.query,
+                    n_results=request.n_results * 2,  # 获取更多候选
+                    include_metadata=True
+                )
+
+                # 转换向量搜索结果格式
+                for result in vector_response.results:
+                    if result.metadata:
+                        vector_results.append({
+                            "id": result.id,
+                            "title": result.metadata.get("title"),
+                            "description": result.metadata.get("description"),
+                            "category": result.metadata.get("category"),
+                            "examples": self._parse_json_field(result.metadata.get("examples", "[]")),
+                            "tags": self._parse_json_field(result.metadata.get("tags", "[]")),
+                            "created_at": result.metadata.get("created_at"),
+                            "updated_at": result.metadata.get("updated_at"),
+                            "distance": result.distance,
+                            "source": "vector"
+                        })
+
+                timing["vector_search"] = time.time() - vector_start
+                search_stats["vector_results"] = len(vector_results)
+                logger.info(f"[{request_id}] Vector search completed in {timing['vector_search']:.3f}s, found {len(vector_results)} results")
+
+            # 文本搜索
+            if request.search_mode in ["text", "hybrid"]:
+                text_start = time.time()
+                logger.info(f"[{request_id}] Performing text search...")
+
+                text_results, text_search_time = await self.elasticsearch_service.search_documents(
+                    query=request.query,
+                    size=request.n_results * 2,  # 获取更多候选
+                    request_id=request_id
+                )
+
+                for result in text_results:
+                    result["source"] = "text"
+
+                timing["text_search"] = time.time() - text_start
+                search_stats["text_results"] = len(text_results)
+                logger.info(f"[{request_id}] Text search completed in {timing['text_search']:.3f}s, found {len(text_results)} results")
+
+            # 结果融合
+            if request.search_mode == "hybrid" and vector_results and text_results:
+                fusion_start = time.time()
+                logger.info(f"[{request_id}] Fusing vector and text results...")
+
+                # 使用重排序服务进行结果融合
+                fused_results = await self.rerank_service.hybrid_score_fusion(
+                    vector_results=vector_results,
+                    text_results=text_results,
+                    vector_weight=request.vector_weight,
+                    text_weight=request.text_weight,
+                    request_id=request_id
+                )
+
+                timing["fusion"] = time.time() - fusion_start
+                search_stats["fused_results"] = len(fused_results)
+                logger.info(f"[{request_id}] Result fusion completed in {timing['fusion']:.3f}s")
+
+            elif request.search_mode == "vector":
+                fused_results = vector_results
+            elif request.search_mode == "text":
+                fused_results = text_results
+            else:
+                fused_results = []
+
+            # 重排序
+            final_results = fused_results
+            if request.enable_rerank and fused_results:
+                rerank_start = time.time()
+                logger.info(f"[{request_id}] Starting reranking of {len(fused_results)} results...")
+
+                reranked_results = await self.rerank_service.rerank_results(
+                    query=request.query,
+                    candidates=fused_results,
+                    top_k=request.rerank_top_k or request.n_results,
+                    request_id=request_id
+                )
+
+                # 设置最终分数
+                for result in reranked_results:
+                    result["final_score"] = result.get("rerank_score", result.get("fusion_score", 0.0))
+
+                final_results = reranked_results
+                timing["rerank"] = time.time() - rerank_start
+                search_stats["reranked_results"] = len(final_results)
+                logger.info(f"[{request_id}] Reranking completed in {timing['rerank']:.3f}s")
+
+            else:
+                # 设置最终分数（不重排序时）
+                for result in final_results:
+                    result["final_score"] = result.get("fusion_score", result.get("distance", 0.0))
+
+            # 限制结果数量
+            final_results = final_results[:request.n_results]
+
+            # 转换为响应格式
+            response_results = []
+            for result in final_results:
+                ranked_result = RankedDocumentResult(
+                    id=result["id"],
+                    title=result.get("title"),
+                    description=result.get("description"),
+                    category=result.get("category"),
+                    examples=result.get("examples"),
+                    tags=result.get("tags"),
+                    created_at=result.get("created_at"),
+                    updated_at=result.get("updated_at"),
+                    vector_score=result.get("vector_score"),
+                    text_score=result.get("text_score"),
+                    fusion_score=result.get("fusion_score"),
+                    rerank_score=result.get("rerank_score"),
+                    final_score=result.get("final_score"),
+                    search_metadata=result.get("hybrid_metadata"),
+                    highlight=result.get("highlight")
+                )
+                response_results.append(ranked_result)
+
+            # 构建响应
+            timing["total"] = time.time() - start_time
+            search_stats.update({
+                "total_candidates": len(fused_results) if request.search_mode == "hybrid" else len(final_results),
+                "final_results": len(response_results),
+                "search_mode": request.search_mode,
+                "rerank_enabled": request.enable_rerank
+            })
+
+            logger.info(f"[{request_id}] Hybrid search completed in {timing['total']:.3f}s")
+            logger.info(f"[{request_id}] Returning {len(response_results)} final results")
+
+            return HybridQueryResponse(
+                results=response_results,
+                query=request.query,
+                total_results=len(response_results),
+                search_mode=request.search_mode,
+                timing=timing,
+                search_stats=search_stats
+            )
+
+        except Exception as e:
+            timing["total"] = time.time() - start_time
+            logger.error(f"[{request_id}] Hybrid search failed after {timing['total']:.3f}s: {e}")
+            raise
+
+    def _parse_json_field(self, json_str: str) -> Any:
+        """
+        解析JSON字段
+
+        Args:
+            json_str: JSON字符串
+
+        Returns:
+            解析后的对象
+        """
+        try:
+            import json
+            return json.loads(json_str) if json_str else []
+        except (json.JSONDecodeError, TypeError):
+            return []
     
     async def upsert_documents(
         self,
         documents: List[DocumentInput],
+        request_id: Optional[str] = None
     ) -> bool:
         """
-        更新或插入文档到知识库（upsert操作）
-        
+        更新或插入文档到知识库（upsert操作到 ChromaDB 和 Elasticsearch）
+
         Args:
             documents: 文档列表
-            collection_name: 集合名称
-            
+            request_id: 请求ID用于追踪
+
         Returns:
             是否成功
         """
+        if not request_id:
+            request_id = str(uuid.uuid4())[:8]
+
         try:
             # 提取文档内容和元数据
             contents = [doc.content for doc in documents]
             ids = [doc.id for doc in documents]
             metadatas = [doc.metadata for doc in documents if doc.metadata]
-            
+
             # 如果没有元数据，设置为 None
             if not metadatas or len(metadatas) != len(documents):
                 metadatas = None
-            
+
             # 生成嵌入向量
-            logger.info(f"正在为 {len(documents)} 个文档生成嵌入向量...")
+            logger.info(f"[{request_id}] 正在为 {len(documents)} 个文档生成嵌入向量...")
             embeddings = await self.embedding_service.encode_batch(contents)
-            
-            # Upsert到 ChromaDB
-            logger.info(f"正在将文档upsert到集合 {self.collection_name}...")
-            success = await self.chroma_service.upsert_documents(
+
+            # 并行 upsert 到 ChromaDB 和 Elasticsearch
+            logger.info(f"[{request_id}] 正在并行 upsert 文档到 ChromaDB 和 Elasticsearch...")
+
+            chroma_task = self.chroma_service.upsert_documents(
                 collection_name=self.collection_name,
                 documents=contents,
                 ids=ids,
                 embeddings=embeddings,
                 metadatas=metadatas
             )
-            
-            if success:
-                logger.info(f"成功upsert {len(documents)} 个文档到知识库")
-            
-            return success
-            
+
+            # Elasticsearch使用相同的add_documents方法（内部会处理upsert）
+            es_task = self.elasticsearch_service.add_documents(
+                documents=documents,
+                request_id=request_id
+            )
+
+            # 等待两个操作完成
+            chroma_success, es_success = await asyncio.gather(
+                chroma_task, es_task, return_exceptions=True
+            )
+
+            # 检查结果
+            if isinstance(chroma_success, Exception):
+                logger.error(f"[{request_id}] ChromaDB upsert 失败: {chroma_success}")
+                chroma_success = False
+
+            if isinstance(es_success, Exception):
+                logger.error(f"[{request_id}] Elasticsearch upsert 失败: {es_success}")
+                es_success = False
+
+            # 如果全部失败或部分失败，记录错误
+            if not chroma_success or not es_success:
+                logger.warning(f"[{request_id}] Upsert 部分失败 - ChromaDB: {chroma_success}, ES: {es_success}")
+                # 对于upsert操作，我们不回滚，只是记录失败
+                return chroma_success or es_success  # 至少一个成功就返回True
+
+            logger.info(f"[{request_id}] 成功 upsert {len(documents)} 个文档到双重存储系统")
+            return True
+
         except Exception as e:
-            logger.error(f"Upsert文档到知识库失败: {e}")
+            logger.error(f"[{request_id}] Upsert文档到知识库失败: {e}")
             raise
 
     async def delete_documents(
         self,
         ids: List[str],
+        request_id: Optional[str] = None
     ) -> bool:
         """
-        删除文档
-        
+        删除文档（从 ChromaDB 和 Elasticsearch 中删除）
+
         Args:
             ids: 文档ID列表
-            collection_name: 集合名称
-            
+            request_id: 请求ID用于追踪
+
         Returns:
             是否成功
         """
+        if not request_id:
+            request_id = str(uuid.uuid4())[:8]
+
         try:
-            success = await self.chroma_service.delete_documents(
+            logger.info(f"[{request_id}] 正在从双重存储系统删除 {len(ids)} 个文档")
+
+            # 并行删除
+            chroma_task = self.chroma_service.delete_documents(
                 collection_name=self.collection_name,
                 ids=ids
             )
-            
-            if success:
-                logger.info(f"成功删除 {len(ids)} 个文档")
-            
-            return success
-            
+
+            es_task = self.elasticsearch_service.delete_documents(
+                ids=ids,
+                request_id=request_id
+            )
+
+            # 等待两个操作完成
+            chroma_success, es_success = await asyncio.gather(
+                chroma_task, es_task, return_exceptions=True
+            )
+
+            # 检查结果
+            if isinstance(chroma_success, Exception):
+                logger.error(f"[{request_id}] ChromaDB 删除失败: {chroma_success}")
+                chroma_success = False
+
+            if isinstance(es_success, Exception):
+                logger.error(f"[{request_id}] Elasticsearch 删除失败: {es_success}")
+                es_success = False
+
+            # 记录结果
+            if chroma_success and es_success:
+                logger.info(f"[{request_id}] 成功从双重存储系统删除 {len(ids)} 个文档")
+                return True
+            elif chroma_success or es_success:
+                logger.warning(f"[{request_id}] 部分删除成功 - ChromaDB: {chroma_success}, ES: {es_success}")
+                return True  # 至少一个成功
+            else:
+                logger.error(f"[{request_id}] 删除失败 - ChromaDB: {chroma_success}, ES: {es_success}")
+                return False
+
         except Exception as e:
-            logger.error(f"删除文档失败: {e}")
+            logger.error(f"[{request_id}] 删除文档失败: {e}")
             raise
     
     async def get_collection_info(self) -> Dict[str, Any]:
@@ -271,20 +578,52 @@ class RAGService:
                 "error": str(e)
             }
     
-    async def clear_knowledge_base(self) -> bool:
+    async def clear_knowledge_base(self, request_id: Optional[str] = None) -> bool:
         """
-        清空知识库
-        
+        清空知识库（清空 ChromaDB 和 Elasticsearch）
+
+        Args:
+            request_id: 请求ID用于追踪
+
         Returns:
             是否成功
         """
+        if not request_id:
+            request_id = str(uuid.uuid4())[:8]
+
         try:
-            success = await self.chroma_service.clear_collection(self.collection_name)
-            if success:
-                logger.info("知识库清空成功")
-            return success
+            logger.info(f"[{request_id}] 正在清空双重存储系统的知识库")
+
+            # 并行清空
+            chroma_task = self.chroma_service.clear_collection(self.collection_name)
+            es_task = self.elasticsearch_service.clear_index(request_id=request_id)
+
+            # 等待两个操作完成
+            chroma_success, es_success = await asyncio.gather(
+                chroma_task, es_task, return_exceptions=True
+            )
+
+            # 检查结果
+            if isinstance(chroma_success, Exception):
+                logger.error(f"[{request_id}] ChromaDB 清空失败: {chroma_success}")
+                chroma_success = False
+
+            if isinstance(es_success, Exception):
+                logger.error(f"[{request_id}] Elasticsearch 清空失败: {es_success}")
+                es_success = False
+
+            if chroma_success and es_success:
+                logger.info(f"[{request_id}] 双重存储系统知识库清空成功")
+                return True
+            elif chroma_success or es_success:
+                logger.warning(f"[{request_id}] 部分清空成功 - ChromaDB: {chroma_success}, ES: {es_success}")
+                return True
+            else:
+                logger.error(f"[{request_id}] 清空失败 - ChromaDB: {chroma_success}, ES: {es_success}")
+                return False
+
         except Exception as e:
-            logger.error(f"清空知识库失败: {e}")
+            logger.error(f"[{request_id}] 清空知识库失败: {e}")
             raise
 
 

@@ -18,7 +18,7 @@ import { IconArrowLeft, IconPlus, IconTrash } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import PageHeader from '@/components/PageHeader/PageHeader';
-import { addKnowledgePoint, KnowledgePointInput, Example } from '@/api/knowledge';
+import { addDocument, KnowledgePointInput, Example } from '@/api/knowledge';
 import { CATEGORY_OPTIONS } from '@/constants/categories';
 
 export default function CreateKnowledgePointPage() {
@@ -84,7 +84,7 @@ export default function CreateKnowledgePointPage() {
       }
 
       setSaving(true);
-      await addKnowledgePoint(form);
+      await addDocument(form);
       toast.success('知识点创建成功');
       router.push('/dashboard/knowledge-base');
     } catch (error) {

@@ -18,9 +18,19 @@ class Settings:
     # ChromaDB 配置
     CHROMA_HOST: str = os.getenv("CHROMA_HOST", "localhost")
     CHROMA_PORT: int = int(os.getenv("CHROMA_PORT", "18000"))
-    
+
+    # Elasticsearch 配置
+    ELASTICSEARCH_HOST: str = os.getenv("ELASTICSEARCH_HOST", "localhost")
+    ELASTICSEARCH_PORT: int = int(os.getenv("ELASTICSEARCH_PORT", "9200"))
+    ELASTICSEARCH_INDEX: str = os.getenv("ELASTICSEARCH_INDEX", "math_knowledge")
+    ELASTICSEARCH_USERNAME: Optional[str] = os.getenv("ELASTICSEARCH_USERNAME")
+    ELASTICSEARCH_PASSWORD: Optional[str] = os.getenv("ELASTICSEARCH_PASSWORD")
+
     # 嵌入模型配置
     EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+
+    # 重排序模型配置
+    RERANK_MODEL: str = os.getenv("RERANK_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
     
     # 默认集合名称
     DEFAULT_COLLECTION: str = os.getenv("DEFAULT_COLLECTION", "math_knowledge")
