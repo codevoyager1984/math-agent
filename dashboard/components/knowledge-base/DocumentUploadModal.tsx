@@ -32,7 +32,7 @@ import {
 import { toast } from 'sonner';
 import { parseDocumentAndCreateSession, DocumentParseSessionResponse, DocumentInput } from '@/api/knowledge';
 import KnowledgePointPreview from './KnowledgePointPreview';
-import DocumentChatInterface from './DocumentChatInterface';
+import { useRouter } from 'next/navigation';
 
 interface DocumentUploadModalProps {
   opened: boolean;
@@ -54,13 +54,13 @@ export default function DocumentUploadModal({
   onClose,
   onSuccess,
 }: DocumentUploadModalProps) {
+  const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [maxKnowledgePoints, setMaxKnowledgePoints] = useState(10);
   const [userRequirements, setUserRequirements] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [sessionResult, setSessionResult] = useState<DocumentParseSessionResponse | null>(null);
-  const [showChatInterface, setShowChatInterface] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [finalKnowledgePoints, setFinalKnowledgePoints] = useState<DocumentInput[]>([]);
   const [hasSessionCreated, setHasSessionCreated] = useState(false);
@@ -72,7 +72,6 @@ export default function DocumentUploadModal({
     setUploading(false);
     setUploadProgress(0);
     setSessionResult(null);
-    setShowChatInterface(false);
     setShowPreview(false);
     setFinalKnowledgePoints([]);
     setHasSessionCreated(false);
@@ -135,12 +134,15 @@ export default function DocumentUploadModal({
       clearInterval(progressInterval);
       setUploadProgress(100);
 
-      // 保存会话结果并跳转到聊天界面
+      // 保存会话结果并导航到分析页面
       setSessionResult(result);
-      setShowChatInterface(true);
       setHasSessionCreated(true);
 
-      toast.success('文档上传成功，正在进入AI分析界面...');
+      toast.success('文档上传成功！跳转到AI分析页面...');
+      
+      // 关闭当前modal并导航到分析页面
+      onClose();
+      router.push(`/dashboard/knowledge-base/chat?sessionId=${result.session_id}&filename=${encodeURIComponent(result.filename)}&preview=${encodeURIComponent(result.extracted_text_preview)}`);
 
     } catch (error) {
       console.error('文档上传失败:', error);
@@ -154,14 +156,7 @@ export default function DocumentUploadModal({
   // 处理聊天界面生成的知识点
   const handleKnowledgePointsReady = useCallback((knowledgePoints: DocumentInput[]) => {
     setFinalKnowledgePoints(knowledgePoints);
-    setShowChatInterface(false);
     setShowPreview(true);
-  }, []);
-
-  // 处理聊天界面关闭
-  const handleChatInterfaceClose = useCallback(() => {
-    setShowChatInterface(false);
-    // 不重置其他状态，允许用户重新打开聊天界面
   }, []);
 
   const getFileIcon = (fileName: string) => {
@@ -184,7 +179,7 @@ export default function DocumentUploadModal({
   return (
     <>
       <Modal
-        opened={opened && !showPreview && !showChatInterface}
+        opened={opened && !showPreview}
         onClose={handleClose}
         title={
           <Group gap="sm">
@@ -327,13 +322,15 @@ export default function DocumentUploadModal({
               </Button>
               
               <Group gap="sm">
-                {hasSessionCreated && (
+                {hasSessionCreated && sessionResult && (
                   <Button
                     variant="gradient"
                     gradient={{ from: 'blue', to: 'cyan' }}
                     leftSection={<IconRefresh size={16} />}
-                    onClick={() => setShowChatInterface(true)}
-                    disabled={!sessionResult}
+                    onClick={() => {
+                      onClose();
+                      router.push(`/dashboard/knowledge-base/chat?sessionId=${sessionResult.session_id}&filename=${encodeURIComponent(sessionResult.filename)}&preview=${encodeURIComponent(sessionResult.extracted_text_preview)}`);
+                    }}
                   >
                     进入AI分析
                   </Button>
@@ -353,17 +350,6 @@ export default function DocumentUploadModal({
         </div>
       </Modal>
 
-      {/* AI聊天分析界面 */}
-      {sessionResult && (
-        <DocumentChatInterface
-          opened={showChatInterface}
-          onClose={handleChatInterfaceClose}
-          sessionId={sessionResult.session_id}
-          filename={sessionResult.filename}
-          extractedTextPreview={sessionResult.extracted_text_preview}
-          onKnowledgePointsReady={handleKnowledgePointsReady}
-        />
-      )}
 
       {/* 知识点预览模态框 */}
       {finalKnowledgePoints.length > 0 && sessionResult && (

@@ -336,6 +336,40 @@ export default function DocumentChatInterface({
       case 'done':
         setCurrentReasoning('');
         setIsStreaming(false);
+        
+        // 流式结束时，尝试从最后一条消息的content中提取知识点
+        setMessages(prev => {
+          const newMessages = [...prev];
+          const lastMessage = newMessages[newMessages.length - 1];
+          if (lastMessage && lastMessage.role === 'assistant' && lastMessage.content) {
+            try {
+              // 尝试解析JSON格式的知识点
+              const jsonMatch = lastMessage.content.match(/```json\n([\s\S]*?)\n```/) || 
+                              lastMessage.content.match(/\{[\s\S]*"knowledge_points"[\s\S]*\}/);
+              if (jsonMatch) {
+                const jsonContent = JSON.parse(jsonMatch[1] || jsonMatch[0]);
+                let knowledgePointsArray = null;
+                
+                // 处理不同的JSON格式
+                if (Array.isArray(jsonContent)) {
+                  knowledgePointsArray = jsonContent;
+                } else if (jsonContent.knowledge_points && Array.isArray(jsonContent.knowledge_points)) {
+                  knowledgePointsArray = jsonContent.knowledge_points;
+                }
+                
+                if (knowledgePointsArray && knowledgePointsArray.length > 0) {
+                  console.log('Extracted knowledge points on done:', knowledgePointsArray);
+                  setCurrentKnowledgePoints(knowledgePointsArray);
+                  lastMessage.knowledgePoints = knowledgePointsArray;
+                  toast.success(`AI 生成了 ${knowledgePointsArray.length} 个知识点`);
+                }
+              }
+            } catch (e) {
+              console.debug('Failed to parse knowledge points on done:', e);
+            }
+          }
+          return newMessages;
+        });
         break;
     }
   }, []);
@@ -472,26 +506,99 @@ export default function DocumentChatInterface({
                             </ActionIcon>
                           </Group>
                           <Collapse in={showReasoning}>
-                            <ScrollArea mah={200}>
-                              <Text size="xs" style={{ whiteSpace: 'pre-wrap' }}>
-                                {message.reasoning || currentReasoning}
-                                {isStreaming && message === messages[messages.length - 1] && (
-                                  <Text component="span" c="yellow.7">▋</Text>
+                            <Box p="xs">
+                              <Text size="xs" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
+                                {/* 流式过程中优先显示实时状态，否则显示存储的内容 */}
+                                {isStreaming && message === messages[messages.length - 1]
+                                  ? currentReasoning
+                                  : message.reasoning
+                                }
+                                {isStreaming && message === messages[messages.length - 1] && currentReasoning && (
+                                  <Text component="span" c="yellow.7" fw={700}>▋</Text>
                                 )}
                               </Text>
-                            </ScrollArea>
+                            </Box>
                           </Collapse>
                         </Card>
                       )}
 
                       {/* 消息内容 */}
                       {message.content && (
-                        <Text style={{ whiteSpace: 'pre-wrap' }}>
-                          {message.content}
-                          {isStreaming && message === messages[messages.length - 1] && (
-                            <Text component="span" c="blue.6">▋</Text>
-                          )}
-                        </Text>
+                        <div>
+                          {/* 尝试解析JSON内容 */}
+                          {(() => {
+                            try {
+                              // 尝试解析JSON格式的知识点
+                              const jsonMatch = message.content.match(/```json\n([\s\S]*?)\n```/);
+                              if (jsonMatch) {
+                                const jsonContent = JSON.parse(jsonMatch[1]);
+                                if (Array.isArray(jsonContent)) {
+                                  return (
+                                    <Stack gap="sm">
+                                      <Text size="sm" c="dimmed">AI 生成的知识点：</Text>
+                                      {jsonContent.map((kp, index) => (
+                                        <Card key={index} withBorder p="sm" bg="var(--mantine-color-blue-0)">
+                                          <Stack gap="xs">
+                                            <Group gap="xs">
+                                              <Badge variant="light" size="sm">{kp.category || '通用'}</Badge>
+                                              <Text fw={600} size="sm">{kp.title}</Text>
+                                            </Group>
+                                            <Text size="xs" c="dimmed">{kp.description}</Text>
+                                            {kp.examples && kp.examples.length > 0 && (
+                                              <div>
+                                                <Text size="xs" fw={500} mb="xs">例题：</Text>
+                                                {kp.examples.map((ex: any, exIndex: number) => (
+                                                  <Card key={exIndex} withBorder p="xs" bg="white" mb="xs">
+                                                    <Text size="xs" fw={500}>题目：{ex.question}</Text>
+                                                    <Text size="xs" c="dimmed">解答：{ex.solution}</Text>
+                                                    {ex.difficulty && (
+                                                      <Badge size="xs" variant="outline" mt="xs">
+                                                        {ex.difficulty}
+                                                      </Badge>
+                                                    )}
+                                                  </Card>
+                                                ))}
+                                              </div>
+                                            )}
+                                            {kp.tags && kp.tags.length > 0 && (
+                                              <Group gap="xs">
+                                                {kp.tags.map((tag: any, tagIndex: number) => (
+                                                  <Badge key={tagIndex} variant="outline" size="xs">
+                                                    {tag}
+                                                  </Badge>
+                                                ))}
+                                              </Group>
+                                            )}
+                                          </Stack>
+                                        </Card>
+                                      ))}
+                                    </Stack>
+                                  );
+                                }
+                              }
+                              
+                              // 如果不是知识点格式，显示原文本
+                              return (
+                                <Text style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                                  {message.content}
+                                  {isStreaming && message === messages[messages.length - 1] && (
+                                    <Text component="span" c="blue.6" fw={700}>▋</Text>
+                                  )}
+                                </Text>
+                              );
+                            } catch (e) {
+                              // 解析失败，显示原文本
+                              return (
+                                <Text style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                                  {message.content}
+                                  {isStreaming && message === messages[messages.length - 1] && (
+                                    <Text component="span" c="blue.6" fw={700}>▋</Text>
+                                  )}
+                                </Text>
+                              );
+                            }
+                          })()}
+                        </div>
                       )}
 
                       {/* 知识点预览 */}
