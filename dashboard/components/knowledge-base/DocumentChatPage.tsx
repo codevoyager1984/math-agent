@@ -237,6 +237,45 @@ export default function DocumentChatPage({
     }
   }, [messages, scrollToBottom, isStreaming]);
 
+  // 加载历史消息
+  useEffect(() => {
+    const loadHistoryMessages = async () => {
+      try {
+        console.log('Loading history messages for session:', sessionId);
+        const response = await fetch(`/api/knowledge-base/chat-session/${sessionId}/messages`);
+
+        if (response.ok) {
+          const historyMessages = await response.json();
+          console.log('History messages loaded:', historyMessages);
+
+          // 转换格式为前端组件需要的格式
+          const convertedMessages: ChatMessage[] = historyMessages.map((msg: any) => ({
+            id: msg.id,
+            role: msg.role as 'user' | 'assistant',
+            content: msg.content,
+            reasoning: msg.reasoning,
+            timestamp: new Date(msg.timestamp),
+            knowledgePoints: msg.knowledgePoints || []
+          }));
+
+          setMessages(convertedMessages);
+          console.log('Set history messages:', convertedMessages.length, 'messages');
+
+          // 如果有历史消息，说明不是初始状态
+          if (convertedMessages.length > 0) {
+            setIsInitialGeneration(false);
+          }
+        } else {
+          console.warn('Failed to load history messages:', response.status);
+        }
+      } catch (error) {
+        console.warn('Error loading history messages:', error);
+      }
+    };
+
+    loadHistoryMessages();
+  }, [sessionId]);
+
   // 获取会话的完整提取文本
   useEffect(() => {
     const fetchFullText = async () => {
@@ -287,6 +326,7 @@ export default function DocumentChatPage({
 
     fetchFullText();
   }, [sessionId, extractedTextPreview]);
+
 
   // 处理流式数据块
   const handleStreamChunk = useCallback((chunk: StreamChunk) => {
@@ -451,114 +491,24 @@ export default function DocumentChatPage({
     }
   }, [fullExtractedText, extractedTextPreview, isGeneratingJson]);
 
-  // 开始初始知识点生成
-  const startInitialGeneration = useCallback(async () => {
+  // 通用的流式聊天函数
+  const sendChatMessages = useCallback(async (newUserMessage?: string) => {
     if (isStreaming) return;
 
-    setIsStreaming(true);
-    setCurrentReasoning('');
-    setIsInitialGeneration(false);
+    // 准备消息列表
+    let messagesToSend = [...messages];
 
-    // 添加用户消息
-    const userMessage: ChatMessage = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: '请分析这个文档并生成知识点',
-      timestamp: new Date(),
-    };
-    setMessages([userMessage]);
-
-    // 添加一个占位的助手消息
-    const assistantMessage: ChatMessage = {
-      id: (Date.now() + 1).toString(),
-      role: 'assistant',
-      content: '',
-      reasoning: '',
-      timestamp: new Date(),
-    };
-    setMessages(prev => [...prev, assistantMessage]);
-
-    try {
-      // 发起流式请求
-      const response = await fetch(
-        `http://localhost:8000/api/knowledge-base/chat-stream/${sessionId}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            message: '请分析这个文档并生成知识点',
-            message_type: 'initial_generation',
-          }),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      if (!response.body) {
-        throw new Error('No response body');
-      }
-
-      // 创建 SSE 连接
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-
-        // 处理完整的行
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // 保留不完整的行
-
-        for (const line of lines) {
-          if (line.trim().startsWith('data: ')) {
-            const data = line.trim().slice(6);
-
-            if (data === '[DONE]') {
-              setIsStreaming(false);
-              return;
-            }
-
-            try {
-              const chunk: StreamChunk = JSON.parse(data);
-              handleStreamChunk(chunk);
-            } catch (e) {
-              console.warn('Failed to parse chunk:', data);
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error in initial generation:', error);
-      toast.error('初始生成失败，请重试');
-      setIsStreaming(false);
+    // 如果有新用户消息，添加到列表
+    if (newUserMessage) {
+      const userMessage: ChatMessage = {
+        id: Date.now().toString(),
+        role: 'user',
+        content: newUserMessage,
+        timestamp: new Date(),
+      };
+      messagesToSend.push(userMessage);
+      setMessages(messagesToSend);
     }
-  }, [sessionId, isStreaming, handleStreamChunk]);
-
-  // 发送消息
-  const handleSendMessage = useCallback(async () => {
-    if (!inputMessage.trim() || isStreaming) return;
-
-    const messageText = inputMessage.trim();
-    setInputMessage('');
-    setIsStreaming(true);
-    setCurrentReasoning('');
-
-    // 添加用户消息
-    const userMessage: ChatMessage = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: messageText,
-      timestamp: new Date(),
-    };
-    setMessages(prev => [...prev, userMessage]);
 
     // 添加占位的助手消息
     const assistantMessage: ChatMessage = {
@@ -568,19 +518,35 @@ export default function DocumentChatPage({
       reasoning: '',
       timestamp: new Date(),
     };
-    setMessages(prev => [...prev, assistantMessage]);
+    messagesToSend.push(assistantMessage);
+    setMessages(messagesToSend);
+
+    setIsStreaming(true);
+    setCurrentReasoning('');
 
     try {
+      // 转换消息格式为API需要的格式
+      const apiMessages = messagesToSend
+        .filter(msg => msg.role !== 'assistant' || msg.content.trim()) // 过滤空的助手消息
+        .map(msg => ({
+          role: msg.role,
+          content: msg.content,
+          reasoning: msg.reasoning,
+          timestamp: msg.timestamp.toISOString()
+        }));
+
+      console.log('Sending messages to API:', apiMessages);
+
+      // 使用统一的流式聊天接口
       const response = await fetch(
-        `http://127.0.0.1:8000/api/knowledge-base/chat-stream/${sessionId}`,
+        `http://localhost:8000/api/knowledge-base/chat-stream/${sessionId}`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            message: messageText,
-            message_type: 'text',
+            messages: apiMessages
           }),
         }
       );
@@ -626,11 +592,29 @@ export default function DocumentChatPage({
         }
       }
     } catch (error) {
-      console.error('Error sending message:', error);
+      console.error('Error in chat stream:', error);
       toast.error('发送消息失败，请重试');
       setIsStreaming(false);
     }
-  }, [inputMessage, sessionId, isStreaming, handleStreamChunk]);
+  }, [sessionId, isStreaming, messages, handleStreamChunk]);
+
+  // 开始初始知识点生成
+  const startInitialGeneration = useCallback(async () => {
+    // 使用通用发送函数
+    await sendChatMessages('请分析这个文档并生成知识点');
+    setIsInitialGeneration(false);
+  }, [sendChatMessages]);
+
+  // 发送消息 - 重构为使用通用函数
+  const handleSendMessage = useCallback(async () => {
+    if (!inputMessage.trim() || isStreaming) return;
+
+    const messageText = inputMessage.trim();
+    setInputMessage('');
+
+    await sendChatMessages(messageText);
+  }, [inputMessage, sendChatMessages, isStreaming]);
+
 
 
   // 处理键盘事件

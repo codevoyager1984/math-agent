@@ -41,8 +41,8 @@ class ChatSessionService:
     """聊天会话管理服务"""
 
     def __init__(self):
-        # 内存存储作为缓存，数据库作为持久化存储
-        self.sessions: Dict[str, ChatSession] = {}
+        # 聊天会话管理服务，直接使用数据库存储
+        pass
 
     def create_session_with_document(
         self,
@@ -99,30 +99,7 @@ class ChatSessionService:
                 db.commit()
                 db.refresh(db_session)
 
-                # 创建内存会话对象（用于缓存）
-                session = ChatSession(
-                    session_id=session_id,
-                    filename=document.filename,
-                    extracted_text=document.extracted_text,
-                    created_at=db_session.created_at,
-                    last_activity=db_session.last_activity,
-                    user_requirements=document.user_requirements
-                )
-
-                # 添加系统消息
-                system_message = ChatMessage(
-                    id=str(uuid.uuid4()),
-                    role="system",
-                    content=f"开始解析文档：{document.filename}",
-                    timestamp=datetime.now(timezone.utc),
-                    message_type="text"
-                )
-                session.messages.append(system_message)
-
-                # 同时保存到数据库
-                self._save_message_to_db(session_id, system_message)
-
-                self.sessions[session_id] = session
+                # 会话创建成功，直接返回session_id
 
                 logger.info(f"[{request_id}] Chat session created successfully")
                 logger.info(f"[{request_id}] Session ID: {session_id}")
@@ -135,19 +112,12 @@ class ChatSessionService:
 
     def get_session(self, session_id: str) -> Optional[ChatSession]:
         """获取聊天会话"""
-        # 先从内存缓存获取
-        session = self.sessions.get(session_id)
-        
-        if not session:
-            # 从数据库加载
-            session = self._load_session_from_db(session_id)
-            if session:
-                self.sessions[session_id] = session
+        # 直接从数据库加载
+        session = self._load_session_from_db(session_id)
 
         if not session:
             logger.warning(f"Session not found: {session_id}")
             return None
-
 
         return session
 
@@ -267,14 +237,24 @@ class ChatSessionService:
 
     def delete_session(self, session_id: str) -> bool:
         """删除会话"""
-        if session_id in self.sessions:
-            request_id = session_id[:8]
-            del self.sessions[session_id]
-            logger.info(f"[{request_id}] Session deleted")
-            return True
+        request_id = session_id[:8]
 
-        logger.warning(f"Cannot delete session - session not found: {session_id}")
-        return False
+        try:
+            with get_db() as db:
+                # 删除会话记录（会级联删除关联的消息）
+                db_session = db.query(DBChatSession).filter(DBChatSession.id == session_id).first()
+                if db_session:
+                    db.delete(db_session)
+                    db.commit()
+                    logger.info(f"[{request_id}] Session deleted from database")
+                    return True
+                else:
+                    logger.warning(f"[{request_id}] Session not found in database: {session_id}")
+                    return False
+
+        except Exception as e:
+            logger.error(f"[{request_id}] Failed to delete session from database: {str(e)}")
+            return False
 
     def cleanup_expired_sessions(self) -> int:
         """清理过期的会话 - 已移除session_timeout逻辑，此方法现在返回0"""
@@ -283,15 +263,34 @@ class ChatSessionService:
 
     def get_session_stats(self) -> Dict[str, Any]:
         """获取会话统计信息"""
-        total_sessions = len(self.sessions)
-        active_sessions = len([s for s in self.sessions.values() if s.status == "active"])
-        completed_sessions = len([s for s in self.sessions.values() if s.status == "completed"])
+        try:
+            with get_db() as db:
+                # 统计总会话数
+                total_sessions = db.query(DBChatSession).count()
 
-        return {
-            "total_sessions": total_sessions,
-            "active_sessions": active_sessions,
-            "completed_sessions": completed_sessions
-        }
+                # 统计活跃会话数
+                active_sessions = db.query(DBChatSession).filter(
+                    DBChatSession.status == ChatSessionStatus.ACTIVE
+                ).count()
+
+                # 统计已完成会话数
+                completed_sessions = db.query(DBChatSession).filter(
+                    DBChatSession.status == ChatSessionStatus.COMPLETED
+                ).count()
+
+                return {
+                    "total_sessions": total_sessions,
+                    "active_sessions": active_sessions,
+                    "completed_sessions": completed_sessions
+                }
+
+        except Exception as e:
+            logger.error(f"Failed to get session stats from database: {str(e)}")
+            return {
+                "total_sessions": 0,
+                "active_sessions": 0,
+                "completed_sessions": 0
+            }
 
 
     def _create_system_prompt(self, session: ChatSession) -> str:

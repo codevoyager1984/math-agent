@@ -203,10 +203,19 @@ class ChatSessionResponse(BaseModel):
     extracted_text: Optional[str] = None
 
 
-class ChatMessageRequest(BaseModel):
-    """聊天消息请求"""
-    message: str
-    message_type: str = "text"  # "text" | "initial_generation"
+
+
+class ChatMessage(BaseModel):
+    """聊天消息"""
+    role: str  # "user" | "assistant" | "system"
+    content: str
+    reasoning: Optional[str] = None
+    timestamp: Optional[str] = None
+
+
+class ChatMessagesRequest(BaseModel):
+    """聊天消息列表请求（新版本）"""
+    messages: List[ChatMessage]
 
 
 class DocumentParseSessionResponse(BaseModel):

@@ -14,8 +14,8 @@ from schemas.embeddings import (
     DocumentsAddRequest, ExampleInput, KnowledgePointAddRequest, QueryRequest, QueryResponse,
     CollectionInfo, AddDocumentInput, KnowledgePointResponse,
     KnowledgePointsResponse, DocumentParseRequest, DocumentParseResponse,
-    BatchKnowledgePointsRequest, BatchKnowledgePointsResponse, 
-    ChatSessionCreateRequest, ChatSessionResponse, ChatMessageRequest, DocumentParseSessionResponse
+    BatchKnowledgePointsRequest, BatchKnowledgePointsResponse,
+    ChatSessionCreateRequest, ChatSessionResponse, ChatMessagesRequest, DocumentParseSessionResponse
 )
 # 移除未使用的导入
 from services.rag_service import rag_service
@@ -798,25 +798,25 @@ async def create_chat_session(request: ChatSessionCreateRequest):
         )
 
 
+
+
 @router.post(
     "/chat-stream/{session_id}",
     summary="流式聊天对话",
-    description="发送消息并获取AI的流式响应，支持思考过程展示"
+    description="发送消息列表并获取AI的流式响应，支持完整的对话上下文"
 )
-async def chat_stream(session_id: str, request: ChatMessageRequest):
+async def chat_stream(session_id: str, request: ChatMessagesRequest):
     """
     流式聊天对话接口
 
     - **session_id**: 会话ID
-    - **message**: 用户消息内容
-    - **message_type**: 消息类型 ("text" | "initial_generation")
+    - **messages**: 消息列表（包含完整对话历史）
     """
     request_id = session_id[:8]
 
     try:
         logger.info(f"[{request_id}] Starting chat stream for session: {session_id}")
-        logger.info(f"[{request_id}] Message type: {request.message_type}")
-        logger.debug(f"[{request_id}] User message: {request.message[:100]}...")
+        logger.info(f"[{request_id}] Messages count: {len(request.messages)}")
 
         # 获取会话
         session_service = get_chat_session_service()
@@ -829,19 +829,34 @@ async def chat_stream(session_id: str, request: ChatMessageRequest):
                 detail="会话不存在或已过期"
             )
 
-        # 添加用户消息到会话
+        # 判断是否为初始生成（消息历史少且包含生成请求）
+        is_initial_generation = (
+            len(request.messages) <= 2 and
+            any("生成知识点" in msg.content or "分析文档" in msg.content for msg in request.messages if msg.role == "user")
+        )
+
+        # 获取最新用户消息
+        user_messages = [msg for msg in request.messages if msg.role == "user"]
+        if not user_messages:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="消息列表中没有用户消息"
+            )
+
+        latest_user_message = user_messages[-1].content
+
+        # 添加用户消息到会话（如果还未添加）
         session_service.add_message(
             session_id=session_id,
             role="user",
-            content=request.message,
-            message_type=request.message_type
+            content=latest_user_message,
+            message_type="initial_generation" if is_initial_generation else "text"
         )
 
         # 获取AI服务
         ai_service = get_ai_service()
 
-        # 处理不同类型的消息
-        if request.message_type == "initial_generation":
+        if is_initial_generation:
             # 生成初始知识点
             logger.info(f"[{request_id}] Generating initial knowledge points")
 
@@ -898,17 +913,16 @@ async def chat_stream(session_id: str, request: ChatMessageRequest):
             )
 
         else:
-            # 处理常规对话
-            logger.info(f"[{request_id}] Processing regular chat message")
+            # 处理常规对话 - 使用前端传来的消息历史
+            logger.info(f"[{request_id}] Processing regular chat with message history")
 
-            # 获取对话上下文
-            context_messages = session_service.get_context_messages(session_id)
-
-            # 添加当前用户消息
-            context_messages.append({
-                "role": "user",
-                "content": request.message
-            })
+            # 转换消息格式为AI服务需要的格式
+            context_messages = []
+            for msg in request.messages:
+                context_messages.append({
+                    "role": msg.role,
+                    "content": msg.content
+                })
 
             async def stream_generator():
                 """流式响应生成器"""
@@ -1017,6 +1031,58 @@ async def get_chat_session(session_id: str):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"获取聊天会话失败: {str(e)}"
+        )
+
+
+@router.get(
+    "/chat-session/{session_id}/messages",
+    response_model=List[Dict],
+    summary="获取会话历史消息",
+    description="获取指定会话的历史消息列表"
+)
+async def get_session_messages(session_id: str):
+    """
+    获取会话历史消息
+
+    - **session_id**: 会话ID
+    """
+    try:
+        session_service = get_chat_session_service()
+        session = session_service.get_session(session_id)
+
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="会话不存在或已过期"
+            )
+
+        # 转换消息格式
+        messages = []
+        for msg in session.messages:
+            message_data = {
+                "id": msg.id,
+                "role": msg.role,
+                "content": msg.content,
+                "timestamp": msg.timestamp.isoformat(),
+            }
+
+            # 可选字段
+            if hasattr(msg, 'reasoning') and msg.reasoning:
+                message_data["reasoning"] = msg.reasoning
+            if hasattr(msg, 'knowledge_points') and msg.knowledge_points:
+                message_data["knowledgePoints"] = msg.knowledge_points
+
+            messages.append(message_data)
+
+        return messages
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取会话消息失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取会话消息失败: {str(e)}"
         )
 
 
