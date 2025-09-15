@@ -11,6 +11,7 @@ from .embedding_service import embedding_service
 from .chroma_service import chroma_service
 from .elasticsearch_service import elasticsearch_service
 from .rerank_service import rerank_service
+from .llm_rerank_service import llm_rerank_service
 from schemas.embeddings import (
     DocumentInput, DocumentResult, QueryResponse, QueryRequest,
     HybridQueryRequest, HybridQueryResponse, RankedDocumentResult
@@ -27,6 +28,7 @@ class RAGService:
         self.chroma_service = chroma_service
         self.elasticsearch_service = elasticsearch_service
         self.rerank_service = rerank_service
+        self.llm_rerank_service = llm_rerank_service
         self.collection_name = "math_knowledge"
     
     def _calculate_similarity_score(self, result: Dict[str, Any], search_mode: str) -> float:
@@ -42,22 +44,42 @@ class RAGService:
         """
         # 1. 如果有重排序分数，优先使用（已经是最优化的分数）
         if result.get("rerank_score") is not None:
-            # rerank_score 通常范围较大，需要适当缩放
             rerank_score = result["rerank_score"]
-            if rerank_score > 10:  # 如果分数很大，使用对数缩放
-                similarity = min(100, (math.log(rerank_score + 1) / math.log(11)) * 100)
+            
+            # 检查是否是 LLM 重排序的分数（已经是 0-100 范围）
+            if result.get("rerank_method") == "llm" or result.get("llm_similarity_score") is not None:
+                # LLM 重排序已经返回 0-100 范围的分数，直接使用
+                return max(0, min(100, rerank_score))
             else:
-                similarity = min(100, rerank_score * 20)  # 假设rerank_score范围0-5
-            return max(0, similarity)
+                # Cross-encoder 重排序分数范围通常是 -∞ 到 +∞
+                # 正分数表示相关，负分数表示不相关
+                # 使用 sigmoid 函数将分数映射到 0-100 范围
+                
+                # 使用调整后的 sigmoid 函数进行缩放
+                # 将分数向下偏移，让低相关性的查询得到更低的分数
+                threshold = 5.0  # 阈值，低于此值的分数会被显著压缩
+                scale = 1.0      # 缩放因子，控制变化陡峭程度
+                adjusted_score = (rerank_score - threshold) * scale
+                sigmoid_score = 1.0 / (1.0 + math.exp(-adjusted_score))
+                similarity = sigmoid_score * 100
+                
+                return max(0, min(100, similarity))
         
         # 2. 如果有final_score，使用它
         if result.get("final_score") is not None:
             final_score = result["final_score"]
-            if final_score > 10:
-                similarity = min(100, (math.log(final_score + 1) / math.log(11)) * 100)
-            else:
-                similarity = min(100, final_score * 20)
-            return max(0, similarity)
+            
+            # final_score 通常来自 rerank_score，使用相同的调整后 sigmoid 转换
+            if final_score > 1:  # 可能是重排序分数
+                threshold = 5.0
+                scale = 1.0
+                adjusted_score = (final_score - threshold) * scale
+                sigmoid_score = 1.0 / (1.0 + math.exp(-adjusted_score))
+                similarity = sigmoid_score * 100
+            else:  # 可能是 0-1 范围的分数
+                similarity = final_score * 100
+                
+            return max(0, min(100, similarity))
         
         # 3. 根据搜索模式选择合适的分数
         if search_mode == 'hybrid' and result.get("fusion_score") is not None:
@@ -366,23 +388,40 @@ class RAGService:
             final_results = fused_results
             if request.enable_rerank and fused_results:
                 rerank_start = time.time()
-                logger.info(f"[{request_id}] Starting reranking of {len(fused_results)} results...")
+                rerank_method = getattr(request, 'rerank_method', 'cross_encoder')
+                logger.info(f"[{request_id}] Starting reranking of {len(fused_results)} results using {rerank_method}...")
 
-                reranked_results = await self.rerank_service.rerank_results(
-                    query=request.query,
-                    candidates=fused_results,
-                    top_k=request.rerank_top_k or request.n_results,
-                    request_id=request_id
-                )
-
-                # 设置最终分数
-                for result in reranked_results:
-                    result["final_score"] = result.get("rerank_score", result.get("fusion_score", 0.0))
+                if rerank_method == 'llm':
+                    # 使用大模型重排序
+                    reranked_results = await self.llm_rerank_service.rerank_documents(
+                        query=request.query,
+                        candidates=fused_results,
+                        top_k=request.rerank_top_k or request.n_results,
+                        request_id=request_id
+                    )
+                    
+                    # LLM rerank 已经设置了 rerank_score，直接使用
+                    for result in reranked_results:
+                        result["final_score"] = result.get("rerank_score", result.get("fusion_score", 0.0))
+                        
+                else:
+                    # 使用传统的 cross-encoder 重排序
+                    reranked_results = await self.rerank_service.rerank_results(
+                        query=request.query,
+                        candidates=fused_results,
+                        top_k=request.rerank_top_k or request.n_results,
+                        request_id=request_id
+                    )
+                    
+                    # 设置最终分数
+                    for result in reranked_results:
+                        result["final_score"] = result.get("rerank_score", result.get("fusion_score", 0.0))
 
                 final_results = reranked_results
                 timing["rerank"] = time.time() - rerank_start
                 search_stats["reranked_results"] = len(final_results)
-                logger.info(f"[{request_id}] Reranking completed in {timing['rerank']:.3f}s")
+                search_stats["rerank_method"] = rerank_method
+                logger.info(f"[{request_id}] Reranking completed in {timing['rerank']:.3f}s using {rerank_method}")
 
             else:
                 # 设置最终分数（不重排序时）

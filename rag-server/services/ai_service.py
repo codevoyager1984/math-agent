@@ -40,6 +40,61 @@ class AIService:
             "Authorization": f"Bearer {api_key}"
         }
     
+    async def generate_response(self, prompt: str, temperature: float = 0.7, max_tokens: int = 2000) -> str:
+        """Generate a text response using AI model"""
+        request_id = str(uuid.uuid4())[:8]
+        start_time = time.time()
+        
+        logger.info(f"[{request_id}] Starting text generation")
+        logger.info(f"[{request_id}] Prompt length: {len(prompt)} characters")
+        
+        try:
+            # Prepare API request
+            url = f"{self.api_base}/chat/completions"
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                "temperature": temperature,
+                "max_tokens": max_tokens
+            }
+            
+            # Make API request
+            async with aiohttp.ClientSession() as session:
+                api_start = time.time()
+                async with session.post(url, json=payload, headers=self.headers) as response:
+                    api_time = time.time() - api_start
+                    
+                    if response.status != 200:
+                        error_text = await response.text()
+                        logger.error(f"[{request_id}] API error {response.status}: {error_text}")
+                        raise Exception(f"API error {response.status}: {error_text}")
+                    
+                    response_data = await response.json()
+                    logger.info(f"[{request_id}] API call completed in {api_time:.3f}s")
+            
+            # Extract response text
+            if 'choices' not in response_data or not response_data['choices']:
+                logger.error(f"[{request_id}] No choices in API response")
+                raise Exception("No response from AI model")
+            
+            generated_text = response_data['choices'][0]['message']['content']
+            
+            total_time = time.time() - start_time
+            logger.info(f"[{request_id}] Text generation completed in {total_time:.3f}s")
+            logger.info(f"[{request_id}] Generated text length: {len(generated_text)} characters")
+            
+            return generated_text
+            
+        except Exception as e:
+            total_time = time.time() - start_time
+            logger.error(f"[{request_id}] Text generation failed after {total_time:.3f}s: {str(e)}")
+            raise
+
     async def generate_knowledge_points(self, text: str, max_points: int = 10) -> List[KnowledgePointData]:
         """Generate knowledge points from text using AI model"""
         # Generate request ID for tracking

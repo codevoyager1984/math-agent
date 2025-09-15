@@ -28,6 +28,7 @@ class QueryRequest(BaseModel):
     vector_weight: float = Field(default=0.6, ge=0.0, le=1.0, description="向量搜索权重")
     text_weight: float = Field(default=0.4, ge=0.0, le=1.0, description="文本搜索权重")
     enable_rerank: bool = Field(default=True, description="是否启用重排序")
+    rerank_method: str = Field(default="llm", description="重排序方法: cross_encoder, llm")
     rerank_top_k: Optional[int] = Field(default=None, description="重排序后返回的top结果数量")
 
 
@@ -40,6 +41,7 @@ class HybridQueryRequest(BaseModel):
     vector_weight: float = Field(default=0.6, ge=0.0, le=1.0, description="向量搜索权重")
     text_weight: float = Field(default=0.4, ge=0.0, le=1.0, description="文本搜索权重")
     enable_rerank: bool = Field(default=True, description="是否启用重排序")
+    rerank_method: str = Field(default="llm", description="重排序方法: cross_encoder, llm")
     rerank_top_k: Optional[int] = Field(default=None, description="重排序后返回的top结果数量")
 
 

@@ -93,6 +93,7 @@ export interface QueryParams {
   vector_weight?: number;
   text_weight?: number;
   enable_rerank?: boolean;
+  rerank_method?: 'cross_encoder' | 'llm';
   rerank_top_k?: number;
 }
 

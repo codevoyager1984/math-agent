@@ -24,6 +24,7 @@ interface SearchFiltersProps {
   vectorWeight: number;
   textWeight: number;
   enableRerank: boolean;
+  rerankMethod: 'cross_encoder' | 'llm';
   rerankTopK?: number;
   onSearchChange: (value: string) => void;
   onCategoryChange: (value: string) => void;
@@ -31,6 +32,7 @@ interface SearchFiltersProps {
   onVectorWeightChange: (value: number) => void;
   onTextWeightChange: (value: number) => void;
   onEnableRerankChange: (value: boolean) => void;
+  onRerankMethodChange: (value: 'cross_encoder' | 'llm') => void;
   onRerankTopKChange: (value: number | undefined) => void;
   onSearch: () => void;
   onReset: () => void;
@@ -44,6 +46,7 @@ export default function SearchFilters({
   vectorWeight,
   textWeight,
   enableRerank,
+  rerankMethod,
   rerankTopK,
   onSearchChange,
   onCategoryChange,
@@ -51,6 +54,7 @@ export default function SearchFilters({
   onVectorWeightChange,
   onTextWeightChange,
   onEnableRerankChange,
+  onRerankMethodChange,
   onRerankTopKChange,
   onSearch,
   onReset,
@@ -64,6 +68,7 @@ export default function SearchFilters({
     vectorWeight,
     textWeight,
     enableRerank,
+    rerankMethod,
     rerankTopK,
   };
   const isCustomConfig = isConfigDifferentFromDefault(currentConfig);
@@ -73,6 +78,12 @@ export default function SearchFilters({
     { value: 'vector', label: '向量搜索' },
     { value: 'text', label: '文本搜索' },
     { value: 'hybrid', label: '混合搜索' },
+  ];
+
+  // 重排序方法选项
+  const rerankMethodOptions = [
+    { value: 'cross_encoder', label: '传统模型 (Cross-Encoder)' },
+    { value: 'llm', label: '大语言模型 (LLM)' },
   ];
 
   // 权重变化时自动调整另一个权重
@@ -216,7 +227,7 @@ export default function SearchFilters({
 
               {/* 重排序配置 */}
               <Divider label="重排序配置" />
-              <Group grow>
+              <Stack gap="md">
                 <Switch
                   label="启用智能重排序"
                   description="使用AI模型对搜索结果进行重排序以提高相关性"
@@ -225,20 +236,30 @@ export default function SearchFilters({
                 />
 
                 {enableRerank && (
-                  <NumberInput
-                    label="重排序结果数量"
-                    description="重排序后返回的最大结果数量"
-                    value={rerankTopK || ''}
-                    onChange={(value) => onRerankTopKChange(typeof value === 'number' ? value : undefined)}
-                    min={1}
-                    max={50}
-                    placeholder="默认使用搜索结果数量"
-                  />
+                  <Group grow>
+                    <Select
+                      label="重排序方法"
+                      description="选择重排序使用的AI模型"
+                      value={rerankMethod}
+                      onChange={(value) => onRerankMethodChange(value as 'cross_encoder' | 'llm')}
+                      data={rerankMethodOptions}
+                    />
+                    
+                    <NumberInput
+                      label="重排序结果数量"
+                      description="重排序后返回的最大结果数量"
+                      value={rerankTopK || ''}
+                      onChange={(value) => onRerankTopKChange(typeof value === 'number' ? value : undefined)}
+                      min={1}
+                      max={50}
+                      placeholder="默认使用搜索结果数量"
+                    />
+                  </Group>
                 )}
-              </Group>
+              </Stack>
 
               {/* 搜索模式说明 */}
-              <Divider label="模式说明" />
+              <Divider label="搜索模式说明" />
               <Stack gap="xs">
                 <Group gap="xs">
                   <Text size="sm" fw={500}>向量搜索:</Text>
@@ -251,6 +272,19 @@ export default function SearchFilters({
                 <Group gap="xs">
                   <Text size="sm" fw={500}>混合搜索:</Text>
                   <Text size="sm" c="dimmed">结合向量和文本搜索，提供最佳搜索体验</Text>
+                </Group>
+              </Stack>
+
+              {/* 重排序方法说明 */}
+              <Divider label="重排序方法说明" />
+              <Stack gap="xs">
+                <Group gap="xs">
+                  <Text size="sm" fw={500}>传统模型:</Text>
+                  <Text size="sm" c="dimmed">使用Cross-Encoder模型，速度快，适合一般场景</Text>
+                </Group>
+                <Group gap="xs">
+                  <Text size="sm" fw={500}>大语言模型:</Text>
+                  <Text size="sm" c="dimmed">使用LLM进行智能重排序，理解力强，自动过滤不相关结果</Text>
                 </Group>
               </Stack>
             </Stack>

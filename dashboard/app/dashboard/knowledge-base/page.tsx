@@ -67,6 +67,7 @@ export default function KnowledgeBasePage() {
   const [vectorWeight, setVectorWeight] = useState(0.6);
   const [textWeight, setTextWeight] = useState(0.4);
   const [enableRerank, setEnableRerank] = useState(true);
+  const [rerankMethod, setRerankMethod] = useState<'cross_encoder' | 'llm'>('llm');
   const [rerankTopK, setRerankTopK] = useState<number | undefined>(undefined);
   const [isConfigLoaded, setIsConfigLoaded] = useState(false);
 
@@ -81,6 +82,7 @@ export default function KnowledgeBasePage() {
     setVectorWeight(savedConfig.vectorWeight);
     setTextWeight(savedConfig.textWeight);
     setEnableRerank(savedConfig.enableRerank);
+    setRerankMethod(savedConfig.rerankMethod);
     setRerankTopK(savedConfig.rerankTopK);
     setIsConfigLoaded(true);
   }, []);
@@ -93,11 +95,12 @@ export default function KnowledgeBasePage() {
         vectorWeight,
         textWeight,
         enableRerank,
+        rerankMethod,
         rerankTopK,
       };
       saveSearchConfig(config);
     }
-  }, [searchMode, vectorWeight, textWeight, enableRerank, rerankTopK, isConfigLoaded]);
+  }, [searchMode, vectorWeight, textWeight, enableRerank, rerankMethod, rerankTopK, isConfigLoaded]);
 
   // 获取知识点列表（默认列表，不包含搜索）
   const fetchKnowledgePointsList = useCallback(async () => {
@@ -138,6 +141,7 @@ export default function KnowledgeBasePage() {
           vector_weight: vectorWeight,
           text_weight: textWeight,
           enable_rerank: enableRerank,
+          rerank_method: rerankMethod,
           rerank_top_k: rerankTopK,
         };
 
@@ -175,7 +179,7 @@ export default function KnowledgeBasePage() {
     } finally {
       setLoading(false);
     }
-  }, [searchMode, vectorWeight, textWeight, enableRerank, rerankTopK, categoryFilter, fetchKnowledgePointsList]);
+  }, [searchMode, vectorWeight, textWeight, enableRerank, rerankMethod, rerankTopK, categoryFilter, fetchKnowledgePointsList]);
 
   // 获取集合信息
   const fetchCollectionInfo = useCallback(async () => {
@@ -232,6 +236,7 @@ export default function KnowledgeBasePage() {
     setVectorWeight(defaultConfig.vectorWeight);
     setTextWeight(defaultConfig.textWeight);
     setEnableRerank(defaultConfig.enableRerank);
+    setRerankMethod(defaultConfig.rerankMethod);
     setRerankTopK(defaultConfig.rerankTopK);
   };
 
@@ -344,6 +349,7 @@ export default function KnowledgeBasePage() {
           vectorWeight={vectorWeight}
           textWeight={textWeight}
           enableRerank={enableRerank}
+          rerankMethod={rerankMethod}
           rerankTopK={rerankTopK}
           onSearchChange={setSearch}
           onCategoryChange={setCategoryFilter}
@@ -351,6 +357,7 @@ export default function KnowledgeBasePage() {
           onVectorWeightChange={setVectorWeight}
           onTextWeightChange={setTextWeight}
           onEnableRerankChange={setEnableRerank}
+          onRerankMethodChange={setRerankMethod}
           onRerankTopKChange={setRerankTopK}
           onSearch={handleSearch}
           onReset={handleReset}

@@ -3,6 +3,7 @@ export interface SearchConfig {
   vectorWeight: number;
   textWeight: number;
   enableRerank: boolean;
+  rerankMethod: 'cross_encoder' | 'llm';
   rerankTopK?: number;
 }
 
@@ -11,6 +12,7 @@ export const DEFAULT_SEARCH_CONFIG: SearchConfig = {
   vectorWeight: 0.6,
   textWeight: 0.4,
   enableRerank: true,
+  rerankMethod: 'llm',
   rerankTopK: undefined,
 };
 
@@ -63,6 +65,7 @@ export function isConfigDifferentFromDefault(config: SearchConfig): boolean {
     config.vectorWeight !== DEFAULT_SEARCH_CONFIG.vectorWeight ||
     config.textWeight !== DEFAULT_SEARCH_CONFIG.textWeight ||
     config.enableRerank !== DEFAULT_SEARCH_CONFIG.enableRerank ||
+    config.rerankMethod !== DEFAULT_SEARCH_CONFIG.rerankMethod ||
     config.rerankTopK !== DEFAULT_SEARCH_CONFIG.rerankTopK
   );
 }
@@ -83,6 +86,9 @@ export function validateSearchConfig(config: Partial<SearchConfig>): SearchConfi
     enableRerank: typeof config.enableRerank === 'boolean'
       ? config.enableRerank
       : DEFAULT_SEARCH_CONFIG.enableRerank,
+    rerankMethod: ['cross_encoder', 'llm'].includes(config.rerankMethod || '')
+      ? (config.rerankMethod as 'cross_encoder' | 'llm')
+      : DEFAULT_SEARCH_CONFIG.rerankMethod,
     rerankTopK: typeof config.rerankTopK === 'number' && config.rerankTopK > 0
       ? config.rerankTopK
       : DEFAULT_SEARCH_CONFIG.rerankTopK,
