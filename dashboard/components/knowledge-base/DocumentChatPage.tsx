@@ -239,32 +239,53 @@ export default function DocumentChatPage({
 
   // 获取会话的完整提取文本
   useEffect(() => {
-    const fetchSessionData = async () => {
+    const fetchFullText = async () => {
       try {
         console.log('Fetching session data for:', sessionId);
-        const response = await fetch(`/api/knowledge-base/chat-session/${sessionId}`);
-        if (response.ok) {
-          const sessionData = await response.json();
-          console.log('Session data received:', sessionData);
-          if (sessionData.extracted_text) {
-            setFullExtractedText(sessionData.extracted_text);
-            console.log('Loaded full extracted text:', sessionData.extracted_text.length, 'characters');
-            console.log('First 500 chars:', sessionData.extracted_text.substring(0, 500));
+
+        // 首先获取session信息以获得document_id
+        const sessionResponse = await fetch(`/api/knowledge-base/chat-session/${sessionId}`);
+        if (!sessionResponse.ok) {
+          console.error('Failed to fetch session data:', sessionResponse.status);
+          setFullExtractedText(extractedTextPreview);
+          return;
+        }
+
+        const sessionData = await sessionResponse.json();
+        console.log('Session data received:', sessionData);
+
+        if (sessionData.document_id) {
+          // 使用document_id获取完整文档文本
+          console.log('Fetching full document text for document_id:', sessionData.document_id);
+          const documentResponse = await fetch(`/api/knowledge-base/documents/${sessionData.document_id}/full-text`);
+
+          if (documentResponse.ok) {
+            const documentData = await documentResponse.json();
+            console.log('Document data received:', documentData);
+
+            if (documentData.extracted_text) {
+              setFullExtractedText(documentData.extracted_text);
+              console.log('Loaded full extracted text:', documentData.extracted_text.length, 'characters');
+              console.log('First 500 chars:', documentData.extracted_text.substring(0, 500));
+            } else {
+              console.warn('No extracted_text in document data, using preview');
+              setFullExtractedText(extractedTextPreview);
+            }
           } else {
-            console.warn('No extracted_text in session data, using preview');
+            console.error('Failed to fetch document text:', documentResponse.status);
             setFullExtractedText(extractedTextPreview);
           }
         } else {
-          console.error('Failed to fetch session data:', response.status);
+          console.warn('No document_id in session data, using preview');
           setFullExtractedText(extractedTextPreview);
         }
       } catch (error) {
-        console.warn('Failed to fetch session data:', error);
+        console.warn('Failed to fetch full text:', error);
         setFullExtractedText(extractedTextPreview);
       }
     };
 
-    fetchSessionData();
+    fetchFullText();
   }, [sessionId, extractedTextPreview]);
 
   // 处理流式数据块
@@ -936,6 +957,7 @@ export default function DocumentChatPage({
           extractedText={fullExtractedText}
           knowledgePoints={currentKnowledgePoints}
           onSuccess={() => {
+            onKnowledgePointsReady(currentKnowledgePoints);
             setShowKnowledgePreview(false);
             router.push('/dashboard/knowledge-base');
           }}
