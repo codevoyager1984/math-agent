@@ -262,6 +262,31 @@ export async function POST(request: Request) {
       country
     });
 
+    // Fetch existing knowledge point names for enhanced system prompt
+    console.log(`[${requestId}] Fetching existing knowledge point names`);
+    let existingKnowledgePoints: string[] = [];
+    try {
+      const ragServerUrl = process.env.RAG_SERVER_URL || 'http://localhost:8000';
+      const knowledgeResponse = await fetch(`${ragServerUrl}/api/knowledge-base/names`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        signal: AbortSignal.timeout(3000), // 3 second timeout
+      });
+
+      if (knowledgeResponse.ok) {
+        const knowledgeData = await knowledgeResponse.json();
+        existingKnowledgePoints = knowledgeData.names || [];
+        console.log(`[${requestId}] Retrieved ${existingKnowledgePoints.length} existing knowledge point names`);
+      } else {
+        console.warn(`[${requestId}] Failed to fetch knowledge point names: ${knowledgeResponse.status}`);
+      }
+    } catch (error) {
+      console.warn(`[${requestId}] Error fetching knowledge point names:`, error);
+      // Continue without knowledge point names - don't break the chat flow
+    }
+
     // Extract attachment info from file parts for storage
     console.log(`[${requestId}] Processing message attachments`);
     const attachments = message.parts
@@ -313,7 +338,11 @@ export async function POST(request: Request) {
           
           const result = streamText({
             model: myProvider.languageModel(selectedChatModel!),
-            system: systemPrompt({ selectedChatModel: selectedChatModel!, requestHints }),
+            system: systemPrompt({
+              selectedChatModel: selectedChatModel!,
+              requestHints,
+              existingKnowledgePoints
+            }),
             messages: modelMessages,
             stopWhen: stepCountIs(5),
             experimental_activeTools: ['searchKnowledgePoints'],

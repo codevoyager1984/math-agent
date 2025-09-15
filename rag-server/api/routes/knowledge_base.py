@@ -16,7 +16,7 @@ from schemas.embeddings import (
     KnowledgePointsResponse, DocumentParseRequest, DocumentParseResponse,
     BatchKnowledgePointsRequest, BatchKnowledgePointsResponse,
     ChatSessionCreateRequest, ChatSessionResponse, ChatMessagesRequest, DocumentParseSessionResponse,
-    JsonParseRequest, JsonParseResponse, ParsedKnowledgePoint
+    JsonParseRequest, JsonParseResponse, ParsedKnowledgePoint, KnowledgePointNamesResponse
 )
 # 移除未使用的导入
 from services.rag_service import rag_service
@@ -187,18 +187,80 @@ async def query_documents(request: QueryRequest):
 async def get_collection_info():
     """
     获取集合信息
-    
+
     - **collection_name**: 集合名称
     """
     try:
         info = await rag_service.get_collection_info()
         return CollectionInfo(**info)
-        
+
     except Exception as e:
         logger.error(f"获取集合信息接口错误: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"获取集合信息失败: {str(e)}"
+        )
+
+
+@router.get(
+    "/names",
+    response_model=KnowledgePointNamesResponse,
+    summary="获取所有知识点名称",
+    description="获取知识库中所有知识点的名称列表，用于改善搜索质量"
+)
+async def get_knowledge_point_names(
+    category: Optional[str] = Query(None, description="分类筛选")
+):
+    """
+    获取所有知识点名称
+
+    - **category**: 可选的分类筛选
+    """
+    try:
+        # 生成请求ID用于追踪
+        request_id = str(uuid.uuid4())[:8]
+        logger.info(f"[{request_id}] Getting knowledge point names, category: {category or 'all'}")
+
+        # 查询所有文档，获取足够多的结果
+        response = await rag_service.query_documents(
+            query="数学知识点",  # 使用通用查询词获取所有知识点
+            n_results=100,  # 获取较多结果
+            include_metadata=True
+        )
+
+        # 提取知识点名称
+        names = []
+        seen_names = set()  # 防重复
+
+        for doc in response.results:
+            if doc.metadata:
+                # 分类筛选
+                if category and doc.metadata.get("category") != category:
+                    continue
+
+                # 提取标题
+                title = doc.metadata.get("title")
+                if title and title not in seen_names:
+                    names.append(title)
+                    seen_names.add(title)
+
+        # 按字母顺序排序
+        names.sort()
+
+        logger.info(f"[{request_id}] Found {len(names)} unique knowledge point names")
+
+        return KnowledgePointNamesResponse(
+            names=names,
+            count=len(names),
+            category=category
+        )
+
+    except Exception as e:
+        logger.error(f"获取知识点名称失败: {e}")
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取知识点名称失败: {str(e)}"
         )
 
 

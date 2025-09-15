@@ -43,7 +43,7 @@ export const KnowledgeSearch = memo(function KnowledgeSearch({
         className="p-4 border rounded-lg bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800"
       >
         <div className="flex items-center gap-2 text-red-700 dark:text-red-300">
-          <SearchIcon className="h-4 w-4" />
+          <SearchIcon className="size-4" />
           <span className="text-sm">
             搜索知识点时出错: {error}
           </span>
@@ -59,7 +59,7 @@ export const KnowledgeSearch = memo(function KnowledgeSearch({
         animate={{ opacity: 1, y: 0 }}
         className="flex items-center gap-2 p-4 border rounded-lg bg-blue-50 dark:bg-blue-950/20"
       >
-        <LoaderIcon className="h-4 w-4 animate-spin text-blue-600" />
+        <LoaderIcon className="size-4 animate-spin text-blue-600" />
         <span className="text-sm text-blue-700 dark:text-blue-300">
           正在搜索相关知识点: "{query}"...
         </span>
@@ -75,7 +75,7 @@ export const KnowledgeSearch = memo(function KnowledgeSearch({
         className="p-4 border rounded-lg bg-gray-50 dark:bg-gray-900/50"
       >
         <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-          <SearchIcon className="h-4 w-4" />
+          <SearchIcon className="size-4" />
           <span className="text-sm">
             未找到与 "{query}" 相关的知识点
           </span>
@@ -91,7 +91,7 @@ export const KnowledgeSearch = memo(function KnowledgeSearch({
       className="space-y-3"
     >
       <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-300 mb-3">
-        <BookOpenIcon className="h-4 w-4" />
+        <BookOpenIcon className="size-4" />
         <span>找到 {totalFound} 个相关知识点</span>
       </div>
 
@@ -109,7 +109,7 @@ export const KnowledgeSearch = memo(function KnowledgeSearch({
                   <div className="flex items-center gap-2 mb-1">
                     <CardTitle className="text-lg">{point.title}</CardTitle>
                     <div className="flex items-center gap-1 text-xs text-gray-500">
-                      <TrendingUpIcon className="h-3 w-3" />
+                      <TrendingUpIcon className="size-3" />
                       <span>相似度: {Math.max(0, point.relevanceScore).toFixed(1)}%</span>
                     </div>
                   </div>
@@ -124,7 +124,7 @@ export const KnowledgeSearch = memo(function KnowledgeSearch({
               
               {point.tags.length > 0 && (
                 <div className="flex items-center gap-1 mt-2">
-                  <TagIcon className="h-3 w-3 text-gray-500" />
+                  <TagIcon className="size-3 text-gray-500" />
                   <div className="flex gap-1 flex-wrap">
                     {point.tags.slice(0, 3).map((tag) => (
                       <Badge key={tag} variant="outline" className="text-xs">

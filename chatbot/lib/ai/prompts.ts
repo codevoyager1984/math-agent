@@ -78,16 +78,27 @@ About the origin of user's request:
 export const systemPrompt = ({
   selectedChatModel,
   requestHints,
+  existingKnowledgePoints = [],
 }: {
   selectedChatModel: string;
   requestHints: RequestHints;
+  existingKnowledgePoints?: string[];
 }) => {
   const requestPrompt = getRequestPromptFromHints(requestHints);
 
+  // Create knowledge points enhancement if available
+  let knowledgePointsPrompt = '';
+  if (existingKnowledgePoints.length > 0) {
+    const limitedNames = existingKnowledgePoints.slice(0, 50); // Limit to first 50 to avoid overly long prompts
+    knowledgePointsPrompt = `\n\n**现有知识点库 (${existingKnowledgePoints.length}个):**\n${limitedNames.join(', ')}${existingKnowledgePoints.length > 50 ? '...' : ''}\n\n**重要提示**: 当用户询问数学问题时，如果问题与上述现有知识点相关，在使用 searchKnowledgePoints 工具时，请在查询中包含或参考相关的现有知识点名称，以提高搜索的准确性和相关性。优先使用已有的专业术语和知识点名称。`;
+  }
+
+  const basePrompt = `${regularPrompt}${knowledgePointsPrompt}\n\n${requestPrompt}`;
+
   if (selectedChatModel === 'chat-model-reasoning') {
-    return `${regularPrompt}\n\n${requestPrompt}`;
+    return basePrompt;
   } else {
-    return `${regularPrompt}\n\n${requestPrompt}\n\n${artifactsPrompt}`;
+    return `${basePrompt}\n\n${artifactsPrompt}`;
   }
 };
 

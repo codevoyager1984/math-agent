@@ -141,14 +141,14 @@ export function KnowledgeTooltip({ knowledgeId, displayText }: KnowledgeTooltipP
               <div className="bg-white dark:bg-gray-800 shadow-xl rounded-lg border border-gray-200 dark:border-gray-700 p-4 backdrop-blur-sm">
                 {isLoading && (
                   <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
-                    <LoaderIcon className="h-4 w-4 animate-spin" />
+                    <LoaderIcon className="size-4 animate-spin" />
                     <span className="text-sm">加载中...</span>
                   </div>
                 )}
 
                 {error && (
                   <div className="flex items-center gap-2 text-red-600">
-                    <AlertCircleIcon className="h-4 w-4" />
+                    <AlertCircleIcon className="size-4" />
                     <span className="text-sm">{error}</span>
                   </div>
                 )}
@@ -216,14 +216,14 @@ export function KnowledgeTooltip({ knowledgeId, displayText }: KnowledgeTooltipP
               {/* Header */}
               <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
                 <div className="flex items-center gap-3">
-                  <BookOpenIcon className="h-6 w-6 text-blue-600" />
+                  <BookOpenIcon className="size-6 text-blue-600" />
                   <h2 className="text-xl font-semibold text-gray-900 dark:text-white">知识点详情</h2>
                 </div>
                 <button
                   onClick={handleClose}
                   className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
                 >
-                  <XIcon className="h-5 w-5 text-gray-500" />
+                  <XIcon className="size-5 text-gray-500" />
                 </button>
               </div>
 
@@ -231,14 +231,14 @@ export function KnowledgeTooltip({ knowledgeId, displayText }: KnowledgeTooltipP
               <div className="p-6">
                 {isLoading && (
                   <div className="flex items-center gap-3 p-8 text-gray-600 dark:text-gray-400">
-                    <LoaderIcon className="h-6 w-6 animate-spin" />
+                    <LoaderIcon className="size-6 animate-spin" />
                     <span className="text-lg">加载中...</span>
                   </div>
                 )}
 
                 {error && (
                   <div className="flex items-center gap-3 p-6 text-red-600 bg-red-50 dark:bg-red-950/20 rounded-lg">
-                    <AlertCircleIcon className="h-6 w-6" />
+                    <AlertCircleIcon className="size-6" />
                     <span className="text-lg">{error}</span>
                   </div>
                 )}

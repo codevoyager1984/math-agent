@@ -33,12 +33,12 @@ export const KnowledgeSearchInput = memo(function KnowledgeSearchInput({
         >
           {showJson ? (
             <>
-              <EyeIcon className="h-3 w-3 mr-1" />
+              <EyeIcon className="size-3 mr-1" />
               查看参数
             </>
           ) : (
             <>
-              <CodeIcon className="h-3 w-3 mr-1" />
+              <CodeIcon className="size-3 mr-1" />
               JSON模式
             </>
           )}
@@ -52,7 +52,7 @@ export const KnowledgeSearchInput = memo(function KnowledgeSearchInput({
       ) : (
         <div className="space-y-2">
           <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-950/20 rounded-md border border-blue-200 dark:border-blue-800">
-            <SearchIcon className="h-4 w-4 text-blue-600" />
+            <SearchIcon className="size-4 text-blue-600" />
             <div className="flex-1">
               <div className="text-sm font-medium text-blue-900 dark:text-blue-100">
                 查询关键词

@@ -47,7 +47,7 @@ export const searchKnowledgePoints = ({ session, dataStream }: SearchKnowledgePo
         }
 
         const data = await response.json();
-        
+
         console.log(`🔍 知识点搜索原始内容:`, data);
         // 记录搜索结果的详细信息
         console.log(`🔍 知识点搜索结果:`, {
@@ -58,15 +58,15 @@ export const searchKnowledgePoints = ({ session, dataStream }: SearchKnowledgePo
           searchMode: data.search_mode || 'unknown',
           timing: data.timing
         });
-        
+
         // 处理返回的知识点数据
         const knowledgePoints = data.results?.map((result: any, index: number) => {
           const metadata = result.metadata || {};
-          
+
           // 解析序列化的数据
           let examples = [];
           let tags = [];
-          
+
           try {
             examples = JSON.parse(metadata.examples || '[]');
             tags = JSON.parse(metadata.tags || '[]');
@@ -79,7 +79,7 @@ export const searchKnowledgePoints = ({ session, dataStream }: SearchKnowledgePo
 
           // 记录每个结果的得分值用于调试
           console.log(`📊 知识点 ${index + 1} "${metadata.title}": 距离=${distance}, 相似度=${similarityScore}`);
-          
+
           return {
             id: result.id,
             title: metadata.title || '未知知识点',
@@ -109,8 +109,8 @@ export const searchKnowledgePoints = ({ session, dataStream }: SearchKnowledgePo
           transient: true,
         });
 
-        const resultMessage = knowledgePoints.length > 0 
-          ? `找到 ${knowledgePoints.length} 个相关知识点` 
+        const resultMessage = knowledgePoints.length > 0
+          ? `找到 ${knowledgePoints.length} 个相关知识点`
           : '未找到相关知识点';
 
         return {
@@ -122,7 +122,7 @@ export const searchKnowledgePoints = ({ session, dataStream }: SearchKnowledgePo
         };
       } catch (error) {
         console.error('Knowledge search error:', error);
-        
+
         // 向用户显示搜索失败
         dataStream.write({
           type: 'data-knowledge-search-error',

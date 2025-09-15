@@ -47,23 +47,23 @@ export const PreviewAttachment = ({
 
   return (
     <div className="group relative flex flex-col">
-      <div data-testid="input-attachment-preview" className="relative w-16 h-16 rounded-lg overflow-hidden bg-muted border">
+      <div data-testid="input-attachment-preview" className="relative size-16 rounded-lg overflow-hidden bg-muted border">
         {contentType?.startsWith('image') ? (
           <div 
-            className="relative w-full h-full group/image cursor-pointer"
+            className="relative size-full group/image cursor-pointer"
             onClick={handleImageClick}
             title="点击查看大图"
           >
             <img
               src={url}
               alt={name ?? 'An image attachment'}
-              className="w-full h-full object-cover hover:opacity-80 transition-opacity"
+              className="size-full object-cover hover:opacity-80 transition-opacity"
             />
             {/* Hover overlay with magnifier icon */}
             {!isUploading && !ocrLoading && (
               <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/image:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                <div className="w-6 h-6 rounded-full bg-white/90 flex items-center justify-center">
-                  <svg className="w-4 h-4 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="size-6 rounded-full bg-white/90 flex items-center justify-center">
+                  <svg className="size-4 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
                   </svg>
                 </div>
@@ -71,7 +71,7 @@ export const PreviewAttachment = ({
             )}
           </div>
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
+          <div className="size-full flex items-center justify-center text-xs text-muted-foreground">
             File
           </div>
         )}
@@ -93,7 +93,7 @@ export const PreviewAttachment = ({
           </Button>
         )}
 
-        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent text-white text-[10px] px-1 py-0.5 truncate">
+        <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent text-white text-[10px] px-1 py-0.5 truncate">
           {name}
         </div>
       </div>
@@ -146,7 +146,7 @@ export const PreviewAttachment = ({
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowPreview(false)}
-                  className="h-8 w-8 p-0"
+                  className="size-8 p-0"
                   title="关闭预览 (ESC)"
                 >
                   <CrossSmallIcon size={16} />

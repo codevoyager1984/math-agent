@@ -248,3 +248,10 @@ class JsonParseResponse(BaseModel):
     error_message: Optional[str] = Field(None, description="错误消息（如果解析失败）")
     parse_method: Optional[str] = Field(None, description="使用的解析方法：direct|position")
 
+
+class KnowledgePointNamesResponse(BaseModel):
+    """知识点名称列表响应"""
+    names: List[str] = Field(..., description="知识点名称列表")
+    count: int = Field(..., description="知识点总数量")
+    category: Optional[str] = Field(None, description="筛选的分类（如果有）")
+
