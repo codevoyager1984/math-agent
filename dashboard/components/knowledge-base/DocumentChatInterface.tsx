@@ -134,7 +134,7 @@ export default function DocumentChatInterface({
     try {
       // 发起流式请求
       const response = await fetch(
-        `/api/rag/knowledge-base/chat-stream/${sessionId}`,
+        `http://localhost:8000/api/knowledge-base/chat-stream/${sessionId}`,
         {
           method: 'POST',
           headers: {
@@ -225,7 +225,7 @@ export default function DocumentChatInterface({
 
     try {
       const response = await fetch(
-        `/api/rag/knowledge-base/chat-stream/${sessionId}`,
+        `http://127.0.0.1:8000/api/knowledge-base/chat-stream/${sessionId}`,
         {
           method: 'POST',
           headers: {

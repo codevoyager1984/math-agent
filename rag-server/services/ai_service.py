@@ -546,14 +546,13 @@ class AIService:
                     # 处理流式响应
                     buffer = ""
                     chunk_count = 0
-                    reasoning_content = ""
-                    message_content = ""
 
                     logger.info(f"[{request_id}] Starting to process stream chunks")
 
-                    async for chunk in response.content.iter_chunked(1024):
+                    async for chunk in response.content.iter_chunked(256):  # 使用更小的块大小
                         chunk_count += 1
                         chunk_text = chunk.decode('utf-8', errors='ignore')
+                        logger.debug(f"[{request_id}] Stream chunk: {chunk_text}")
                         buffer += chunk_text
 
                         # 按行处理SSE数据
@@ -573,8 +572,6 @@ class AIService:
                                 yield {
                                     "type": "done",
                                     "data": {
-                                        "reasoning": reasoning_content,
-                                        "content": message_content,
                                         "total_time": time.time() - start_time
                                     }
                                 }
@@ -588,34 +585,35 @@ class AIService:
                                 if 'choices' in data and data['choices']:
                                     choice = data['choices'][0]
 
-                                    # 处理思考过程 (reasoning)
-                                    if 'reasoning' in choice:
-                                        reasoning_delta = choice['reasoning'].get('content', '')
-                                        if reasoning_delta:
-                                            reasoning_content += reasoning_delta
+                                    # 处理流式数据中的delta
+                                    if 'delta' in choice:
+                                        delta = choice['delta']
+
+                                        # 处理思考过程 (reasoning_content)
+                                        if 'reasoning_content' in delta and delta['reasoning_content']:
+                                            reasoning_delta = delta['reasoning_content']
                                             logger.debug(f"[{request_id}] Reasoning chunk: {len(reasoning_delta)} chars")
                                             yield {
                                                 "type": "reasoning",
                                                 "data": {
-                                                    "reasoning": reasoning_delta,
-                                                    "full_reasoning": reasoning_content
+                                                    "reasoning": reasoning_delta
                                                 }
                                             }
+                                            # 强制让出控制权，确保数据立即发送
+                                            await asyncio.sleep(0)
 
-                                    # 处理普通消息内容
-                                    if 'delta' in choice:
-                                        delta = choice['delta']
+                                        # 处理普通消息内容
                                         if 'content' in delta and delta['content']:
                                             content_delta = delta['content']
-                                            message_content += content_delta
                                             logger.debug(f"[{request_id}] Content chunk: {len(content_delta)} chars")
                                             yield {
                                                 "type": "content",
                                                 "data": {
-                                                    "content": content_delta,
-                                                    "full_content": message_content
+                                                    "content": content_delta
                                                 }
                                             }
+                                            # 强制让出控制权，确保数据立即发送
+                                            await asyncio.sleep(0)
 
                                     # 检查是否有完成的消息
                                     if 'message' in choice:
