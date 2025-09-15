@@ -29,18 +29,19 @@ class KnowledgePointData(BaseModel):
 
 
 class AIService:
-    """AI service for knowledge point generation using DeepSeek"""
-    
-    def __init__(self, api_key: str, api_base: str = "https://api.deepseek.com"):
+    """AI service for knowledge point generation using OpenAI-compatible API"""
+
+    def __init__(self, api_key: str, api_base: str = "https://api.openai.com", model: str = "gpt-3.5-turbo"):
         self.api_key = api_key
         self.api_base = api_base.rstrip('/')
+        self.model = model
         self.headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}"
         }
     
     async def generate_knowledge_points(self, text: str, max_points: int = 10) -> List[KnowledgePointData]:
-        """Generate knowledge points from text using DeepSeek"""
+        """Generate knowledge points from text using AI model"""
         # Generate request ID for tracking
         request_id = str(uuid.uuid4())[:8]
         start_time = time.time()
@@ -58,12 +59,12 @@ class AIService:
             prompt_time = time.time() - prompt_start
             logger.debug(f"[{request_id}] Prompt created in {prompt_time:.3f}s (length: {len(prompt)} chars)")
             
-            # Call DeepSeek API
-            logger.info(f"[{request_id}] Calling DeepSeek API")
+            # Call AI API
+            logger.info(f"[{request_id}] Calling AI API")
             api_start = time.time()
-            response = await self._call_deepseek_api(prompt, request_id)
+            response = await self._call_ai_api(prompt, request_id)
             api_time = time.time() - api_start
-            logger.info(f"[{request_id}] DeepSeek API call completed in {api_time:.3f}s")
+            logger.info(f"[{request_id}] AI API call completed in {api_time:.3f}s")
             
             # Parse the response
             logger.debug(f"[{request_id}] Parsing AI response")
@@ -155,12 +156,12 @@ class AIService:
 """
         return prompt
     
-    async def _call_deepseek_api(self, prompt: str, request_id: str) -> str:
-        """Call DeepSeek API to generate content"""
-        url = f"{self.api_base}/v1/chat/completions"
+    async def _call_ai_api(self, prompt: str, request_id: str) -> str:
+        """Call AI API to generate content"""
+        url = f"{self.api_base}/chat/completions"
         
         payload = {
-            "model": "deepseek-chat",
+            "model": self.model,
             "messages": [
                 {
                     "role": "user",
@@ -173,7 +174,7 @@ class AIService:
         }
         
         # Log request details (without sensitive content)
-        logger.info(f"[{request_id}] DeepSeek API request - Model: {payload['model']}, Max tokens: {payload['max_tokens']}, Temperature: {payload['temperature']}")
+        logger.info(f"[{request_id}] AI API request - Model: {payload['model']}, Max tokens: {payload['max_tokens']}, Temperature: {payload['temperature']}")
         logger.debug(f"[{request_id}] Request URL: {url}")
         logger.debug(f"[{request_id}] Prompt length: {len(prompt)} characters")
         logger.debug(f"[{request_id}] Request payload size: {len(str(payload))} bytes")
@@ -192,8 +193,8 @@ class AIService:
                     
                     if response.status != 200:
                         error_text = await response.text()
-                        logger.error(f"[{request_id}] HTTP error {response.status}: {error_text[:500]}")
-                        raise Exception(f"DeepSeek API returned status {response.status}: {error_text[:200]}")
+                        logger.error(f"[{request_id}] HTTP error {response.status}: {error_text}")
+                        raise Exception(f"AI API returned status {response.status}: {error_text[:200]}")
                     
                     result = await response.json()
             
@@ -203,7 +204,7 @@ class AIService:
             if "choices" not in result or len(result["choices"]) == 0:
                 logger.error(f"[{request_id}] Invalid API response: no choices found")
                 logger.error(f"[{request_id}] Response: {result}")
-                raise Exception("No response from DeepSeek API")
+                raise Exception("No response from AI API")
             
             # Extract usage information if available
             if "usage" in result:
@@ -213,23 +214,23 @@ class AIService:
                            f"Total: {usage.get('total_tokens', 'N/A')}")
             
             content = result["choices"][0]["message"]["content"]
-            logger.info(f"[{request_id}] DeepSeek response received - Content length: {len(content)} characters")
+            logger.info(f"[{request_id}] AI response received - Content length: {len(content)} characters")
             logger.debug(f"[{request_id}] Response content preview: {content[:200]}...")
             
             return content.strip()
             
         except aiohttp.ClientError as e:
-            logger.error(f"[{request_id}] DeepSeek API request failed: {e}")
+            logger.error(f"[{request_id}] AI API request failed: {e}")
             logger.error(f"[{request_id}] Request URL: {url}")
-            raise Exception(f"DeepSeek API request failed: {str(e)}")
+            raise Exception(f"AI API request failed: {str(e)}")
         except asyncio.TimeoutError as e:
-            logger.error(f"[{request_id}] DeepSeek API request timeout: {e}")
-            raise Exception(f"DeepSeek API request timeout: {str(e)}")
+            logger.error(f"[{request_id}] AI API request timeout: {e}")
+            raise Exception(f"AI API request timeout: {str(e)}")
         except json.JSONDecodeError as e:
             logger.error(f"[{request_id}] Failed to decode JSON response: {e}")
-            raise Exception(f"Invalid JSON response from DeepSeek API: {str(e)}")
+            raise Exception(f"Invalid JSON response from AI API: {str(e)}")
         except Exception as e:
-            logger.error(f"[{request_id}] Error calling DeepSeek API: {e}")
+            logger.error(f"[{request_id}] Error calling AI API: {e}")
             raise
     
     def _parse_ai_response(self, response: str, request_id: str) -> List[KnowledgePointData]:
@@ -356,12 +357,16 @@ class AIService:
 
 def create_ai_service() -> AIService:
     """Create AI service instance with configuration"""
-    
-    api_key = settings.DEEPSEEK_API_KEY
+
+    api_key = settings.AI_API_KEY
     if not api_key:
-        raise ValueError("DEEPSEEK_API_KEY environment variable is required")
-    
-    return AIService(api_key=api_key)
+        raise ValueError("AI_API_KEY environment variable is required")
+
+    return AIService(
+        api_key=api_key,
+        api_base=settings.AI_BASE_URL,
+        model=settings.AI_MODEL
+    )
 
 
 # Global instance - will be created when needed

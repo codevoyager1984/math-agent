@@ -45,8 +45,10 @@ class Settings:
     # CORS 配置
     CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "*")
 
-    # AI 服务配置
-    DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "")
+    # AI 服务配置 - 兼容 OpenAI API 格式的模型
+    AI_API_KEY: str = os.getenv("AI_API_KEY", "")
+    AI_BASE_URL: str = os.getenv("AI_BASE_URL", "https://api.openai.com")
+    AI_MODEL: str = os.getenv("AI_MODEL", "gpt-3.5-turbo")
 
     DATABASE_URL: str = os.getenv("DATABASE_URL")
     

@@ -4,6 +4,9 @@ import {
   wrapLanguageModel,
 } from 'ai';
 import { deepseek } from '@ai-sdk/deepseek';
+import { openai } from '@ai-sdk/openai';
+import { xai } from '@ai-sdk/xai';
+import { anthropic } from '@ai-sdk/anthropic';
 import { gateway } from '@ai-sdk/gateway';
 import {
   artifactModel,
