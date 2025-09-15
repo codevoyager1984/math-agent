@@ -60,144 +60,7 @@ interface StreamChunk {
   data: any;
 }
 
-// 工具函数：从带行号的文本中按行号提取内容
-function extractContentByLines(numberedText: string, startLine: number, endLine: number): string {
-  const lines = numberedText.split('\n');
-  
-  console.log(`Extracting lines ${startLine}-${endLine} from ${lines.length} total lines`);
-  
-  // 找到匹配的行号并提取内容
-  const extractedLines = [];
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    // 匹配行号格式 "001: 内容" 或 "  1: 内容"
-    const match = line.match(/^\s*(\d+):\s*(.*)$/);
-    if (match) {
-      const lineNumber = parseInt(match[1]);
-      const content = match[2];
-      
-      if (lineNumber >= startLine && lineNumber <= endLine) {
-        extractedLines.push(content);
-      }
-    }
-  }
-  
-  const result = extractedLines.join('\n').trim();
-  console.log(`Extracted content (${result.length} chars):`, result.substring(0, 200) + '...');
-  
-  return result;
-}
 
-// 工具函数：将原始文本转换为带行号格式
-function addLineNumbers(text: string): string {
-  const lines = text.split('\n');
-  return lines.map((line, index) => `${(index + 1).toString().padStart(3, ' ')}: ${line}`).join('\n');
-}
-
-// 工具函数：从位置信息解析知识点
-function parseKnowledgePointsFromPositions(originalText: string, positionData: any[]): DocumentInput[] {
-  const knowledgePoints: DocumentInput[] = [];
-  console.log('Starting to parse', positionData.length, 'knowledge points');
-  
-  // 将原始文本转换为带行号格式，匹配AI处理的格式
-  const numberedText = addLineNumbers(originalText);
-  console.log('Created numbered text, total lines:', numberedText.split('\n').length);
-  
-  for (let i = 0; i < positionData.length; i++) {
-    const kpData = positionData[i];
-    console.log(`Processing knowledge point ${i + 1}:`, kpData);
-    
-    // 提取描述内容
-    const descRange = kpData.description_range || {};
-    console.log(`Description range for KP ${i + 1}:`, descRange);
-    
-    let description = '';
-    if (descRange.start_line && descRange.end_line) {
-      description = extractContentByLines(
-        numberedText,
-        descRange.start_line,
-        descRange.end_line
-      );
-    } else {
-      // 如果没有范围信息，使用已有的描述或标题
-      description = kpData.description || kpData.title || '未命名知识点';
-    }
-    console.log(`Extracted description for KP ${i + 1}:`, description.substring(0, 100) + '...');
-    
-    // 提取例题
-    const examples = [];
-    const examplesData = kpData.examples || [];
-    console.log(`Processing ${examplesData.length} examples for KP ${i + 1}`);
-    
-    for (let j = 0; j < examplesData.length; j++) {
-      const exData = examplesData[j];
-      console.log(`Processing example ${j + 1}:`, exData);
-      
-      const questionRange = exData.question_range || {};
-      const solutionRange = exData.solution_range || {};
-      
-      console.log(`Question range:`, questionRange);
-      console.log(`Solution range:`, solutionRange);
-      
-      let question = '';
-      let solution = '';
-      
-      // 提取题目
-      if (questionRange.start_line && questionRange.end_line) {
-        question = extractContentByLines(
-          numberedText,
-          questionRange.start_line,
-          questionRange.end_line
-        );
-      } else if (exData.question) {
-        question = exData.question;
-      }
-      
-      // 提取解答
-      if (solutionRange.start_line && solutionRange.end_line) {
-        solution = extractContentByLines(
-          numberedText,
-          solutionRange.start_line,
-          solutionRange.end_line
-        );
-      } else if (exData.solution) {
-        solution = exData.solution;
-      }
-      
-      console.log(`Extracted question:`, question);
-      console.log(`Extracted solution:`, solution);
-      
-      if (question.trim() && solution.trim()) {
-        examples.push({
-          question: question.trim(),
-          solution: solution.trim(),
-          difficulty: exData.difficulty || 'medium'
-        });
-        console.log(`Added example ${j + 1} successfully`);
-      } else {
-        console.warn(`Failed to extract example ${j + 1}: question="${question}", solution="${solution}"`);
-        console.warn(`Question range:`, questionRange, `Solution range:`, solutionRange);
-      }
-    }
-    
-    console.log(`Total examples extracted for KP ${i + 1}:`, examples.length);
-    
-    // 创建知识点
-    const kp: DocumentInput = {
-      title: kpData.title || '未命名知识点',
-      description: description || kpData.description || '',
-      category: kpData.category || 'general',
-      examples,
-      tags: kpData.tags || []
-    };
-    
-    knowledgePoints.push(kp);
-  }
-  
-  console.log('Finished parsing, total knowledge points:', knowledgePoints.length);
-  return knowledgePoints;
-}
 
 export default function DocumentChatPage({
   sessionId,
@@ -212,7 +75,6 @@ export default function DocumentChatPage({
   const [isStreaming, setIsStreaming] = useState(false);
   const [currentKnowledgePoints, setCurrentKnowledgePoints] = useState<DocumentInput[]>([]);
   const [isInitialGeneration, setIsInitialGeneration] = useState(true);
-  const [showExtractedText, setShowExtractedText] = useState(false);
   const [currentReasoning, setCurrentReasoning] = useState('');
   const [isGeneratingJson, setIsGeneratingJson] = useState(false);
   const [showKnowledgePreview, setShowKnowledgePreview] = useState(false);
@@ -328,6 +190,53 @@ export default function DocumentChatPage({
   }, [sessionId, extractedTextPreview]);
 
 
+  // 调用后端解析知识点JSON
+  const parseKnowledgePointsWithBackend = useCallback(async (jsonContent: string): Promise<DocumentInput[]> => {
+    try {
+      console.log('Calling backend JSON parsing API');
+      console.log('JSON content length:', jsonContent.length);
+      console.log('Session ID:', sessionId);
+
+      const response = await fetch(`http://localhost:8000/api/knowledge-base/parse-json`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          json_content: jsonContent,
+          session_id: sessionId
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Backend parsing failed: ${response.status}`);
+      }
+
+      const result = await response.json();
+
+      if (!result.success) {
+        throw new Error(result.error_message || 'Backend parsing failed');
+      }
+
+      console.log('Backend parsing successful');
+      console.log('Parse method:', result.parse_method);
+      console.log('Parsed knowledge points:', result.knowledge_points.length);
+
+      // 转换为前端格式
+      return result.knowledge_points.map((kp: any) => ({
+        title: kp.title,
+        description: kp.description,
+        category: kp.category,
+        examples: kp.examples,
+        tags: kp.tags
+      }));
+
+    } catch (error) {
+      console.error('Backend parsing failed:', error);
+      throw error;
+    }
+  }, [sessionId]);
+
   // 处理流式数据块
   const handleStreamChunk = useCallback((chunk: StreamChunk) => {
     switch (chunk.type) {
@@ -388,78 +297,26 @@ export default function DocumentChatPage({
         setCurrentReasoning('');
         setIsStreaming(false);
         setIsGeneratingJson(false);
-        
+
         // 流式结束时，尝试从最后一条消息的content中提取知识点
         setMessages(prev => {
           const newMessages = [...prev];
           const lastMessage = newMessages[newMessages.length - 1];
           if (lastMessage && lastMessage.role === 'assistant' && lastMessage.content) {
-            try {
-              // 尝试解析JSON格式的知识点
-              const jsonMatch = lastMessage.content.match(/```json\n([\s\S]*?)\n```/) || 
-                              lastMessage.content.match(/\{[\s\S]*"knowledge_points"[\s\S]*\}/);
-              if (jsonMatch) {
-                const jsonContent = JSON.parse(jsonMatch[1] || jsonMatch[0]);
-                
-                // 处理不同的JSON格式
-                let rawData = null;
-                if (Array.isArray(jsonContent)) {
-                  rawData = jsonContent;
-                } else if (jsonContent.knowledge_points && Array.isArray(jsonContent.knowledge_points)) {
-                  rawData = jsonContent.knowledge_points;
-                }
+            // 异步解析知识点JSON
+            (async () => {
+              try {
+                // 尝试从内容中提取JSON
+                const jsonMatch = lastMessage.content.match(/```json\n([\s\S]*?)\n```/) ||
+                                lastMessage.content.match(/\{[\s\S]*"knowledge_points"[\s\S]*\}/);
+                if (jsonMatch) {
+                  const jsonContent = jsonMatch[1] || jsonMatch[0];
 
-                if (rawData && rawData.length > 0) {
-                  console.log('Extracted raw data:', JSON.stringify(rawData, null, 2));
+                  console.log('Found JSON content, calling backend for parsing');
 
-                  // 检查数据格式：是位置信息还是直接内容
-                  const firstItem = rawData[0];
-                  const isPositionFormat = firstItem.description_range || firstItem.examples?.some((ex: any) => ex.question_range || ex.solution_range);
+                  // 调用后端解析API
+                  const knowledgePointsArray = await parseKnowledgePointsWithBackend(jsonContent);
 
-                  console.log('Is position format:', isPositionFormat);
-
-                  let knowledgePointsArray: DocumentInput[] = [];
-                  
-                  if (isPositionFormat) {
-                    // 位置信息格式，需要解析行号
-                    console.log('Using position-based parsing');
-
-                    // 确保使用最新的完整文本，如果还没加载完成则使用预览文本
-                    const textToUse = fullExtractedText && fullExtractedText.length > 0 ? fullExtractedText : extractedTextPreview;
-                    console.log('Text to use length:', textToUse.length);
-                    console.log('Full extracted text length:', fullExtractedText.length);
-                    console.log('Preview text length:', extractedTextPreview.length);
-
-                    // 显示文本的前几行和后几行
-                    const lines = textToUse.split('\n');
-                    console.log('Total lines in text:', lines.length);
-                    console.log('First 5 lines:', lines.slice(0, 5));
-                    if (lines.length > 110) {
-                      console.log('Lines 110-115:', lines.slice(109, 115));
-                    }
-                    if (lines.length > 220) {
-                      console.log('Lines 220-230:', lines.slice(219, 230));
-                    }
-
-                    knowledgePointsArray = parseKnowledgePointsFromPositions(textToUse, rawData);
-                  } else {
-                    // 直接内容格式，直接使用
-                    console.log('Using direct content format');
-                    knowledgePointsArray = rawData.map((kp: any) => ({
-                      title: kp.title || '未命名知识点',
-                      description: kp.description || '',
-                      category: kp.category || 'general',
-                      examples: (kp.examples || []).map((ex: any) => ({
-                        question: ex.question || '',
-                        solution: ex.solution || '',
-                        difficulty: ex.difficulty || 'medium'
-                      })),
-                      tags: kp.tags || []
-                    }));
-                  }
-                  
-                  console.log('Final parsed knowledge points:', JSON.stringify(knowledgePointsArray, null, 2));
-                  
                   if (knowledgePointsArray.length > 0) {
                     // 验证解析结果
                     knowledgePointsArray.forEach((kp, index) => {
@@ -470,26 +327,38 @@ export default function DocumentChatPage({
                         tags: kp.tags?.length || 0
                       });
                     });
-                    
+
+                    // 更新状态
                     setCurrentKnowledgePoints(knowledgePointsArray);
                     lastMessage.knowledgePoints = knowledgePointsArray;
                     setShowKnowledgePreview(true);
                     toast.success(`AI 生成了 ${knowledgePointsArray.length} 个知识点`);
+
+                    // 更新消息状态
+                    setMessages(prev => {
+                      const updatedMessages = [...prev];
+                      const updatedLastMessage = updatedMessages[updatedMessages.length - 1];
+                      if (updatedLastMessage && updatedLastMessage.id === lastMessage.id) {
+                        updatedLastMessage.knowledgePoints = knowledgePointsArray;
+                      }
+                      return updatedMessages;
+                    });
                   } else {
                     console.warn('No knowledge points were successfully parsed');
                     toast.warning('知识点解析失败，请检查AI输出格式');
                   }
                 }
+              } catch (e) {
+                console.error('Failed to parse knowledge points:', e);
+                toast.error('知识点解析失败：' + (e as Error).message);
               }
-            } catch (e) {
-              console.debug('Failed to parse knowledge points on done:', e);
-            }
+            })();
           }
           return newMessages;
         });
         break;
     }
-  }, [fullExtractedText, extractedTextPreview, isGeneratingJson]);
+  }, [isGeneratingJson, parseKnowledgePointsWithBackend]);
 
   // 通用的流式聊天函数
   const sendChatMessages = useCallback(async (newUserMessage?: string) => {
@@ -669,19 +538,6 @@ export default function DocumentChatPage({
           </Group>
         </div>
 
-        {/* 提取文本预览 */}
-        <Collapse in={showExtractedText}>
-          <Alert icon={<IconInfoCircle size={16} />} color="gray">
-            <Stack gap="xs">
-              <Text size="sm" fw={500}>提取的文档内容：</Text>
-              <ScrollArea mah={300}>
-                <Text size="xs" style={{ whiteSpace: 'pre-wrap' }}>
-                  {extractedTextPreview}
-                </Text>
-              </ScrollArea>
-            </Stack>
-          </Alert>
-        </Collapse>
 
         {/* 主要内容区域 */}
         <Paper withBorder p="lg" radius="md" style={{ 

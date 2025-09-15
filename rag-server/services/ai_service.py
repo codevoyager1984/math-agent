@@ -4,6 +4,7 @@ AI service for generating knowledge points using DeepSeek API
 import json
 import time
 import uuid
+import re
 from typing import List, Optional, Dict, Any, AsyncGenerator
 import aiohttp
 import asyncio
@@ -261,33 +262,61 @@ class AIService:
         extracted_lines = lines[start_idx:end_idx]
         return '\n'.join(extracted_lines).strip()
     
+    def _add_line_numbers(self, text: str) -> str:
+        """将原始文本转换为带行号格式，匹配AI处理的格式"""
+        lines = text.split('\n')
+        return '\n'.join(f"{i+1:3d}: {line}" for i, line in enumerate(lines))
+
+    def _extract_content_by_lines_with_prefix(self, numbered_text: str, start_line: int, end_line: int) -> str:
+        """从带行号前缀的文本中按行号提取内容"""
+        lines = numbered_text.split('\n')
+
+        # 找到匹配的行号并提取内容
+        extracted_lines = []
+
+        for line in lines:
+            # 尝试匹配行号格式 "001: 内容" 或 "  1: 内容"
+            match = re.match(r'^\s*(\d+):\s*(.*)', line)
+            if match:
+                line_number = int(match.group(1))
+                content = match.group(2)
+
+                if start_line <= line_number <= end_line:
+                    extracted_lines.append(content)
+
+        return '\n'.join(extracted_lines).strip()
+
     def _create_knowledge_points_from_positions(self, text: str, position_data: dict) -> List[KnowledgePointData]:
         """Create knowledge point objects from position information"""
         knowledge_points = []
-        
+
+        # 将原始文本转换为带行号格式，匹配AI处理的格式
+        numbered_text = self._add_line_numbers(text)
+        logger.debug(f"Created numbered text with {len(numbered_text.split())} lines")
+
         for kp_data in position_data.get("knowledge_points", []):
-            # Extract description content
+            # Extract description content using numbered text
             desc_range = kp_data.get("description_range", {})
-            description = self._extract_content_by_lines(
-                text, 
+            description = self._extract_content_by_lines_with_prefix(
+                numbered_text,
                 desc_range.get("start_line", 1),
                 desc_range.get("end_line", 1)
             )
-            
+
             # Extract examples
             examples = []
             for ex_data in kp_data.get("examples", []):
                 question_range = ex_data.get("question_range", {})
                 solution_range = ex_data.get("solution_range", {})
-                
-                question = self._extract_content_by_lines(
-                    text,
+
+                question = self._extract_content_by_lines_with_prefix(
+                    numbered_text,
                     question_range.get("start_line", 1),
                     question_range.get("end_line", 1)
                 )
-                
-                solution = self._extract_content_by_lines(
-                    text,
+
+                solution = self._extract_content_by_lines_with_prefix(
+                    numbered_text,
                     solution_range.get("start_line", 1),
                     solution_range.get("end_line", 1)
                 )
@@ -663,6 +692,137 @@ class AIService:
                     "error": str(e)
                 }
             }
+
+    def parse_knowledge_points_json(self, json_content: str, original_text: str, request_id: str = None) -> List[KnowledgePointData]:
+        """
+        通用JSON知识点解析方法，支持直接内容和位置信息两种格式
+
+        Args:
+            json_content: 要解析的JSON字符串
+            original_text: 原始文档文本（用于位置格式解析）
+            request_id: 请求ID
+
+        Returns:
+            List[KnowledgePointData]: 解析后的知识点列表
+        """
+        if not request_id:
+            request_id = str(uuid.uuid4())[:8]
+
+        logger.info(f"[{request_id}] Starting universal JSON knowledge points parsing")
+        logger.info(f"[{request_id}] JSON content length: {len(json_content)} characters")
+        logger.info(f"[{request_id}] Original text length: {len(original_text)} characters")
+
+        try:
+            # 清理并解析JSON
+            json_content = json_content.strip()
+
+            # 查找JSON内容
+            start_idx = json_content.find('{')
+            end_idx = json_content.rfind('}') + 1
+
+            if start_idx == -1 or end_idx == 0:
+                logger.error(f"[{request_id}] No JSON found in content")
+                raise ValueError("No valid JSON found in content")
+
+            clean_json = json_content[start_idx:end_idx]
+            logger.debug(f"[{request_id}] Extracted JSON length: {len(clean_json)} characters")
+
+            # 解析JSON
+            parsed_data = json.loads(clean_json)
+
+            # 处理不同的JSON格式
+            raw_data = None
+            if isinstance(parsed_data, list):
+                raw_data = parsed_data
+            elif isinstance(parsed_data, dict) and "knowledge_points" in parsed_data:
+                raw_data = parsed_data["knowledge_points"]
+            else:
+                logger.error(f"[{request_id}] Invalid JSON structure")
+                raise ValueError("Invalid JSON structure: no knowledge_points found")
+
+            if not raw_data or len(raw_data) == 0:
+                logger.warning(f"[{request_id}] No knowledge points found in JSON")
+                return []
+
+            logger.info(f"[{request_id}] Found {len(raw_data)} knowledge points to process")
+
+            # 检查数据格式：优先使用直接内容格式，只有在直接内容不完整时才使用位置信息
+            first_item = raw_data[0] if raw_data else {}
+            has_direct_content = (
+                first_item.get("description") and
+                first_item.get("examples") and
+                len(first_item.get("examples", [])) > 0 and
+                all(ex.get("question") and ex.get("solution") for ex in first_item.get("examples", []))
+            )
+            has_position_info = (
+                first_item.get("description_range") or
+                any(ex.get("question_range") or ex.get("solution_range")
+                    for ex in first_item.get("examples", []))
+            )
+
+            use_position_format = not has_direct_content and has_position_info
+
+            logger.info(f"[{request_id}] Format detection - Direct content: {has_direct_content}, Position info: {has_position_info}")
+            logger.info(f"[{request_id}] Using position format: {use_position_format}")
+
+            if use_position_format:
+                # 使用位置信息格式解析
+                logger.info(f"[{request_id}] Using position-based parsing")
+                return self._create_knowledge_points_from_positions(original_text, {"knowledge_points": raw_data})
+            else:
+                # 使用直接内容格式解析
+                logger.info(f"[{request_id}] Using direct content parsing")
+                return self._create_knowledge_points_from_direct_content(raw_data, request_id)
+
+        except json.JSONDecodeError as e:
+            logger.error(f"[{request_id}] JSON parsing failed: {e}")
+            raise ValueError(f"Invalid JSON format: {str(e)}")
+        except Exception as e:
+            logger.error(f"[{request_id}] Knowledge points parsing failed: {e}")
+            raise
+
+    def _create_knowledge_points_from_direct_content(self, raw_data: list, request_id: str) -> List[KnowledgePointData]:
+        """从直接内容格式创建知识点"""
+        knowledge_points = []
+
+        logger.info(f"[{request_id}] Creating knowledge points from direct content format")
+
+        for i, kp_data in enumerate(raw_data):
+            logger.debug(f"[{request_id}] Processing direct knowledge point {i + 1}: {kp_data.get('title', 'Unknown')}")
+
+            # 处理例题
+            examples = []
+            for j, ex_data in enumerate(kp_data.get("examples", [])):
+                logger.debug(f"[{request_id}] Processing example {j + 1}")
+
+                question = ex_data.get("question", "").strip()
+                solution = ex_data.get("solution", "").strip()
+
+                if question and solution:
+                    example = ExampleData(
+                        question=question,
+                        solution=solution,
+                        difficulty=ex_data.get("difficulty", "medium")
+                    )
+                    examples.append(example)
+                    logger.debug(f"[{request_id}] Added example {j + 1} - Q: {len(question)} chars, S: {len(solution)} chars")
+                else:
+                    logger.warning(f"[{request_id}] Skipped example {j + 1} - missing question or solution")
+
+            # 创建知识点
+            kp = KnowledgePointData(
+                title=kp_data.get("title", "未命名知识点"),
+                description=kp_data.get("description", "").strip(),
+                category=kp_data.get("category", "general"),
+                examples=examples,
+                tags=kp_data.get("tags", [])
+            )
+
+            knowledge_points.append(kp)
+            logger.info(f"[{request_id}] Created knowledge point {i + 1}: '{kp.title}' with {len(examples)} examples")
+
+        logger.info(f"[{request_id}] Direct content parsing completed - {len(knowledge_points)} knowledge points created")
+        return knowledge_points
 
     def _extract_knowledge_points_from_content(self, content: str, original_text: str = None) -> Optional[List[Dict[str, Any]]]:
         """从内容中提取知识点JSON并解析实际内容"""

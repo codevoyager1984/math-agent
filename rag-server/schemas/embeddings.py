@@ -224,3 +224,27 @@ class DocumentParseSessionResponse(BaseModel):
     filename: str
     extracted_text_preview: str  # 文本预览（前2000字符）
 
+
+class JsonParseRequest(BaseModel):
+    """JSON解析请求"""
+    json_content: str = Field(..., description="要解析的JSON字符串")
+    original_text: Optional[str] = Field(None, description="原始文档文本（可选，优先从session_id获取）")
+    session_id: Optional[str] = Field(None, description="会话ID（用于从数据库获取原始文档文本）")
+
+
+class ParsedKnowledgePoint(BaseModel):
+    """解析后的知识点"""
+    title: str
+    description: str
+    category: str = "general"
+    examples: List[ExampleInput] = []
+    tags: List[str] = []
+
+
+class JsonParseResponse(BaseModel):
+    """JSON解析响应"""
+    success: bool = Field(..., description="解析是否成功")
+    knowledge_points: List[ParsedKnowledgePoint] = Field(default=[], description="解析后的知识点列表")
+    error_message: Optional[str] = Field(None, description="错误消息（如果解析失败）")
+    parse_method: Optional[str] = Field(None, description="使用的解析方法：direct|position")
+

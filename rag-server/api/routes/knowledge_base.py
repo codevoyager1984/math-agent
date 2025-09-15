@@ -15,7 +15,8 @@ from schemas.embeddings import (
     CollectionInfo, AddDocumentInput, KnowledgePointResponse,
     KnowledgePointsResponse, DocumentParseRequest, DocumentParseResponse,
     BatchKnowledgePointsRequest, BatchKnowledgePointsResponse,
-    ChatSessionCreateRequest, ChatSessionResponse, ChatMessagesRequest, DocumentParseSessionResponse
+    ChatSessionCreateRequest, ChatSessionResponse, ChatMessagesRequest, DocumentParseSessionResponse,
+    JsonParseRequest, JsonParseResponse, ParsedKnowledgePoint
 )
 # 移除未使用的导入
 from services.rag_service import rag_service
@@ -1083,6 +1084,124 @@ async def get_session_messages(session_id: str):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"获取会话消息失败: {str(e)}"
+        )
+
+
+@router.post(
+    "/parse-json",
+    response_model=JsonParseResponse,
+    summary="解析知识点JSON",
+    description="将AI生成的JSON字符串解析为知识点对象"
+)
+async def parse_knowledge_points_json(request: JsonParseRequest):
+    """
+    解析知识点JSON
+
+    - **json_content**: 要解析的JSON字符串
+    - **original_text**: 原始文档文本（用于位置格式解析）
+    - **session_id**: 会话ID（可选）
+    """
+    request_id = request.session_id[:8] if request.session_id else str(uuid.uuid4())[:8]
+
+    try:
+        logger.info(f"[{request_id}] JSON parsing request received")
+        logger.info(f"[{request_id}] JSON content length: {len(request.json_content)} characters")
+
+        # 获取原始文档文本
+        original_text = request.original_text
+
+        # 如果没有提供原始文本但有session_id，从数据库获取
+        if not original_text and request.session_id:
+            logger.info(f"[{request_id}] Fetching original text from session: {request.session_id}")
+
+            session_service = get_chat_session_service()
+            session = session_service.get_session(request.session_id)
+
+            if not session:
+                logger.error(f"[{request_id}] Session not found: {request.session_id}")
+                return JsonParseResponse(
+                    success=False,
+                    knowledge_points=[],
+                    error_message="会话不存在或已过期"
+                )
+
+            original_text = session.extracted_text
+            logger.info(f"[{request_id}] Retrieved text from session: {len(original_text) if original_text else 0} characters")
+
+        if not original_text:
+            logger.error(f"[{request_id}] No original text available for parsing")
+            return JsonParseResponse(
+                success=False,
+                knowledge_points=[],
+                error_message="无法获取原始文档文本，需要提供original_text参数或有效的session_id"
+            )
+
+        logger.info(f"[{request_id}] Using original text length: {len(original_text)} characters")
+
+        # 获取AI服务实例
+        ai_service = get_ai_service()
+
+        # 调用通用解析方法
+        knowledge_points = ai_service.parse_knowledge_points_json(
+            json_content=request.json_content,
+            original_text=original_text,
+            request_id=request_id
+        )
+
+        # 转换为响应格式
+        parsed_points = []
+        for kp in knowledge_points:
+            # 转换例题格式
+            examples = []
+            for ex in kp.examples:
+                examples.append({
+                    "question": ex.question,
+                    "solution": ex.solution,
+                    "difficulty": ex.difficulty
+                })
+
+            parsed_point = ParsedKnowledgePoint(
+                title=kp.title,
+                description=kp.description,
+                category=kp.category,
+                examples=examples,
+                tags=kp.tags
+            )
+            parsed_points.append(parsed_point)
+
+        # 判断使用的解析方法
+        parse_method = "position" if any(
+            kp_data.get("description_range") or any(
+                ex.get("question_range") or ex.get("solution_range")
+                for ex in kp_data.get("examples", [])
+            )
+            for kp_data in [json.loads(request.json_content.strip()[request.json_content.find('{'):request.json_content.rfind('}') + 1]).get("knowledge_points", [{}])[0] if request.json_content.strip() else {}]
+        ) else "direct"
+
+        logger.info(f"[{request_id}] JSON parsing completed successfully")
+        logger.info(f"[{request_id}] Parsed {len(parsed_points)} knowledge points using {parse_method} method")
+
+        return JsonParseResponse(
+            success=True,
+            knowledge_points=parsed_points,
+            parse_method=parse_method
+        )
+
+    except ValueError as e:
+        logger.error(f"[{request_id}] JSON parsing validation error: {str(e)}")
+        return JsonParseResponse(
+            success=False,
+            knowledge_points=[],
+            error_message=f"JSON格式错误: {str(e)}"
+        )
+
+    except Exception as e:
+        logger.error(f"[{request_id}] JSON parsing failed: {str(e)}")
+        traceback.print_exc()
+        return JsonParseResponse(
+            success=False,
+            knowledge_points=[],
+            error_message=f"解析失败: {str(e)}"
         )
 
 
