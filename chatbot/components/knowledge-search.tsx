@@ -110,7 +110,7 @@ export const KnowledgeSearch = memo(function KnowledgeSearch({
                     <CardTitle className="text-lg">{point.title}</CardTitle>
                     <div className="flex items-center gap-1 text-xs text-gray-500">
                       <TrendingUpIcon className="h-3 w-3" />
-                      <span>相似度: {(Math.max(0, (1 - point.relevanceScore / 2)) * 100).toFixed(1)}%</span>
+                      <span>相似度: {Math.max(0, point.relevanceScore).toFixed(1)}%</span>
                     </div>
                   </div>
                   <CardDescription className="mt-1">

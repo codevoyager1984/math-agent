@@ -26,7 +26,7 @@ export const searchKnowledgePoints = ({ session, dataStream }: SearchKnowledgePo
 
         // 调用 RAG 服务的知识点查询接口
         const ragServerUrl = process.env.RAG_SERVER_URL || 'http://localhost:8000';
-        const response = await fetch(`${ragServerUrl}/api/embedding/query`, {
+        const response = await fetch(`${ragServerUrl}/api/knowledge-base/query`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -35,6 +35,10 @@ export const searchKnowledgePoints = ({ session, dataStream }: SearchKnowledgePo
             query,
             n_results: 3, // 获取最相关的3个知识点
             include_metadata: true,
+            search_mode: "hybrid",
+            vector_weight: 0.6,
+            text_weight: 0.4,
+            enable_rerank: true
           }),
         });
 
@@ -50,7 +54,9 @@ export const searchKnowledgePoints = ({ session, dataStream }: SearchKnowledgePo
           query,
           totalResults: data.total_results || 0,
           resultsCount: data.results?.length || 0,
-          firstResultDistance: data.results?.[0]?.distance || 'N/A'
+          firstResultDistance: data.results?.[0]?.distance || 'N/A',
+          searchMode: data.search_mode || 'unknown',
+          timing: data.timing
         });
         
         // 处理返回的知识点数据
@@ -69,9 +75,10 @@ export const searchKnowledgePoints = ({ session, dataStream }: SearchKnowledgePo
           }
 
           const distance = result.distance || 0;
-          
-          // 记录每个结果的距离值用于调试
-          console.log(`📊 知识点 ${index + 1} "${metadata.title}": 距离=${distance}`);
+          const similarityScore = result.similarity_score || result.final_score || 0;
+
+          // 记录每个结果的得分值用于调试
+          console.log(`📊 知识点 ${index + 1} "${metadata.title}": 距离=${distance}, 相似度=${similarityScore}`);
           
           return {
             id: result.id,
@@ -80,7 +87,7 @@ export const searchKnowledgePoints = ({ session, dataStream }: SearchKnowledgePo
             category: metadata.category || 'general',
             examples: examples.slice(0, 2), // 只返回前2个例题
             tags,
-            relevanceScore: distance,
+            relevanceScore: similarityScore, // 使用新的相似度分数
           };
         }) || [];
 
