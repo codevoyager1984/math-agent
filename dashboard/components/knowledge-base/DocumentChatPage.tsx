@@ -74,7 +74,6 @@ export default function DocumentChatPage({
   const [inputMessage, setInputMessage] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [currentKnowledgePoints, setCurrentKnowledgePoints] = useState<DocumentInput[]>([]);
-  const [isInitialGeneration, setIsInitialGeneration] = useState(true);
   const [currentReasoning, setCurrentReasoning] = useState('');
   const [isGeneratingJson, setIsGeneratingJson] = useState(false);
   const [showKnowledgePreview, setShowKnowledgePreview] = useState(false);
@@ -123,10 +122,6 @@ export default function DocumentChatPage({
           setMessages(convertedMessages);
           console.log('Set history messages:', convertedMessages.length, 'messages');
 
-          // 如果有历史消息，说明不是初始状态
-          if (convertedMessages.length > 0) {
-            setIsInitialGeneration(false);
-          }
         } else {
           console.warn('Failed to load history messages:', response.status);
         }
@@ -467,12 +462,6 @@ export default function DocumentChatPage({
     }
   }, [sessionId, isStreaming, messages, handleStreamChunk]);
 
-  // 开始初始知识点生成
-  const startInitialGeneration = useCallback(async () => {
-    // 使用通用发送函数
-    await sendChatMessages('请分析这个文档并生成知识点');
-    setIsInitialGeneration(false);
-  }, [sendChatMessages]);
 
   // 发送消息 - 重构为使用通用函数
   const handleSendMessage = useCallback(async () => {
@@ -556,19 +545,20 @@ export default function DocumentChatPage({
                 type="hover"
               >
                 <Stack gap="md" pr="sm">
-                  {messages.length === 0 && isInitialGeneration && (
+                  {messages.length === 0 && (
                     <Paper p="xl" withBorder style={{ textAlign: 'center' }}>
                       <Stack gap="md" align="center">
                         <IconSparkles size={64} color="var(--mantine-color-blue-6)" />
-                        <Title order={3}>准备开始 AI 分析文档</Title>
+                        <Title order={3}>AI 文档分析</Title>
                         <Text ta="center" size="sm" c="dimmed" maw={400}>
-                          AI 将分析您的文档并生成结构化的数学知识点，您可以在对话中要求修改和优化结果
+                          点击下方按钮开始智能分析，或直接输入问题与AI对话
                         </Text>
                         <Button
-                          leftSection={<IconSparkles size={16} />}
-                          onClick={startInitialGeneration}
-                          loading={isStreaming}
                           size="lg"
+                          leftSection={<IconSparkles size={20} />}
+                          onClick={() => sendChatMessages("请分析文档并生成知识点")}
+                          disabled={isStreaming}
+                          loading={isStreaming}
                         >
                           开始 AI 分析
                         </Button>
@@ -763,7 +753,7 @@ export default function DocumentChatPage({
               {/* 输入区域 */}
               <Group align="flex-end" gap="sm">
                 <Textarea
-                  placeholder="输入您的消息或修改要求..."
+                  placeholder="输入消息..."
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.currentTarget.value)}
                   onKeyDown={handleKeyPress}

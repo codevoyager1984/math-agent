@@ -648,11 +648,9 @@ class AIService:
                                     if 'message' in choice:
                                         message = choice['message']
                                         if message.get('content'):
-                                            # 尝试解析知识点JSON（需要传入原始文本进行行号解析）
-                                            # 注意：这里我们需要从会话中获取原始文本，但在流式响应中无法直接访问
-                                            # 暂时使用简单提取，后续可以考虑在调用时传入原始文本
+                                            # 尝试解析知识点JSON，使用传入的extracted_text进行解析
                                             try:
-                                                knowledge_points = self._extract_knowledge_points_from_content(message['content'])
+                                                knowledge_points = self._extract_knowledge_points_from_content(message['content'], extracted_text)
                                                 if knowledge_points:
                                                     logger.info(f"[{request_id}] Extracted {len(knowledge_points)} knowledge points")
                                                     yield {

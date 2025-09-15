@@ -830,12 +830,6 @@ async def chat_stream(session_id: str, request: ChatMessagesRequest):
                 detail="会话不存在或已过期"
             )
 
-        # 判断是否为初始生成（消息历史少且包含生成请求）
-        is_initial_generation = (
-            len(request.messages) <= 2 and
-            any("生成知识点" in msg.content or "分析文档" in msg.content for msg in request.messages if msg.role == "user")
-        )
-
         # 获取最新用户消息
         user_messages = [msg for msg in request.messages if msg.role == "user"]
         if not user_messages:
@@ -851,139 +845,109 @@ async def chat_stream(session_id: str, request: ChatMessagesRequest):
             session_id=session_id,
             role="user",
             content=latest_user_message,
-            message_type="initial_generation" if is_initial_generation else "text"
+            message_type="text"
         )
 
         # 获取AI服务
         ai_service = get_ai_service()
 
-        if is_initial_generation:
-            # 生成初始知识点
-            logger.info(f"[{request_id}] Generating initial knowledge points")
+        # 统一处理所有对话 - 包含文档上下文
+        logger.info(f"[{request_id}] Processing unified chat with document context")
 
-            async def stream_generator():
-                """流式响应生成器"""
-                try:
-                    async for chunk in ai_service.generate_initial_knowledge_points(
-                        extracted_text=session.extracted_text,
-                        user_requirements=session.user_requirements,
-                        request_id=request_id
-                    ):
-                        # 格式化为SSE格式
-                        chunk_json = json.dumps(chunk, ensure_ascii=False)
-                        yield f"data: {chunk_json}\n\n"
+        # 创建包含文档上下文的消息列表
+        context_messages = []
 
-                        # 如果有知识点数据，保存到会话
-                        if chunk.get("type") == "knowledge_points":
-                            knowledge_points = chunk.get("data", {}).get("knowledge_points", [])
-                            if knowledge_points:
-                                session_service.update_knowledge_points(session_id, knowledge_points)
+        # 首先添加系统消息，使用AI服务的标准提示
+        if session.extracted_text:
+            # 获取标准的系统提示
+            system_prompt = ai_service._create_extraction_system_prompt()
 
-                        # 如果是完成消息，添加助手回复到会话
-                        if chunk.get("type") == "done":
-                            session_service.add_message(
-                                session_id=session_id,
-                                role="assistant",
-                                content=chunk.get("data", {}).get("content", ""),
-                                reasoning=chunk.get("data", {}).get("reasoning", ""),
-                                message_type="text"
-                            )
+            # 组合系统提示和文档内容
+            system_message = {
+                "role": "system",
+                "content": f"""{system_prompt}
 
-                    # 发送完成标记
-                    yield "data: [DONE]\n\n"
+文档内容（带行号）：
+{chr(10).join(f"{i+1:3d}: {line}" for i, line in enumerate(session.extracted_text.split(chr(10))))}
 
-                except Exception as e:
-                    logger.error(f"[{request_id}] Error in stream generation: {str(e)}")
-                    error_chunk = {
-                        "type": "error",
-                        "data": {
-                            "error": str(e)
-                        }
+请基于此文档内容回答用户问题。对于普通问答直接回答，对于知识点生成请求请按照上述JSON格式输出。"""
+            }
+            context_messages.append(system_message)
+
+        # 然后添加用户要求（如果有）
+        if session.user_requirements:
+            context_messages.append({
+                "role": "system",
+                "content": f"用户特殊要求：{session.user_requirements}"
+            })
+
+        # 最后添加对话历史
+        for msg in request.messages:
+            context_messages.append({
+                "role": msg.role,
+                "content": msg.content
+            })
+
+        async def stream_generator():
+            """统一的流式响应生成器"""
+            try:
+                assistant_content = ""
+                assistant_reasoning = ""
+
+                async for chunk in ai_service.stream_chat_response(
+                    messages=context_messages,
+                    request_id=request_id,
+                    extracted_text=session.extracted_text  # 传入文档文本供知识点解析使用
+                ):
+                    # 格式化为SSE格式
+                    chunk_json = json.dumps(chunk, ensure_ascii=False)
+                    yield f"data: {chunk_json}\n\n"
+
+                    # 累积助手回复内容
+                    if chunk.get("type") == "content":
+                        assistant_content += chunk.get("data", {}).get("content", "")
+                    elif chunk.get("type") == "reasoning":
+                        assistant_reasoning += chunk.get("data", {}).get("reasoning", "")
+
+                    # 如果有知识点数据，保存到会话
+                    if chunk.get("type") == "knowledge_points":
+                        knowledge_points = chunk.get("data", {}).get("knowledge_points", [])
+                        if knowledge_points:
+                            session_service.update_knowledge_points(session_id, knowledge_points)
+
+                    # 如果是完成消息，添加助手回复到会话
+                    if chunk.get("type") == "done":
+                        session_service.add_message(
+                            session_id=session_id,
+                            role="assistant",
+                            content=assistant_content or chunk.get("data", {}).get("content", ""),
+                            reasoning=assistant_reasoning or chunk.get("data", {}).get("reasoning", ""),
+                            message_type="text"
+                        )
+
+                # 发送完成标记
+                yield "data: [DONE]\n\n"
+
+            except Exception as e:
+                logger.error(f"[{request_id}] Error in unified chat stream: {str(e)}")
+                error_chunk = {
+                    "type": "error",
+                    "data": {
+                        "error": str(e)
                     }
-                    yield f"data: {json.dumps(error_chunk, ensure_ascii=False)}\n\n"
-                    yield "data: [DONE]\n\n"
-
-            return StreamingResponse(
-                stream_generator(),
-                media_type="text/plain",
-                headers={
-                    "Cache-Control": "no-cache",
-                    "Connection": "keep-alive",
-                    "Content-Type": "text/event-stream",
                 }
-            )
+                yield f"data: {json.dumps(error_chunk, ensure_ascii=False)}\n\n"
+                yield "data: [DONE]\n\n"
 
-        else:
-            # 处理常规对话 - 使用前端传来的消息历史
-            logger.info(f"[{request_id}] Processing regular chat with message history")
-
-            # 转换消息格式为AI服务需要的格式
-            context_messages = []
-            for msg in request.messages:
-                context_messages.append({
-                    "role": msg.role,
-                    "content": msg.content
-                })
-
-            async def stream_generator():
-                """流式响应生成器"""
-                try:
-                    assistant_content = ""
-                    assistant_reasoning = ""
-
-                    async for chunk in ai_service.stream_chat_response(
-                        messages=context_messages,
-                        request_id=request_id
-                    ):
-                        # 格式化为SSE格式
-                        chunk_json = json.dumps(chunk, ensure_ascii=False)
-                        yield f"data: {chunk_json}\n\n"
-
-                        # 累积助手回复内容
-                        if chunk.get("type") == "content":
-                            assistant_content += chunk.get("data", {}).get("content", "")
-                        elif chunk.get("type") == "reasoning":
-                            assistant_reasoning += chunk.get("data", {}).get("reasoning", "")
-
-                        # 如果有知识点数据，保存到会话
-                        if chunk.get("type") == "knowledge_points":
-                            knowledge_points = chunk.get("data", {}).get("knowledge_points", [])
-                            if knowledge_points:
-                                session_service.update_knowledge_points(session_id, knowledge_points)
-
-                        # 如果是完成消息，添加助手回复到会话
-                        if chunk.get("type") == "done":
-                            session_service.add_message(
-                                session_id=session_id,
-                                role="assistant",
-                                content=assistant_content or chunk.get("data", {}).get("content", ""),
-                                reasoning=assistant_reasoning or chunk.get("data", {}).get("reasoning", ""),
-                                message_type="text"
-                            )
-
-                    # 发送完成标记
-                    yield "data: [DONE]\n\n"
-
-                except Exception as e:
-                    logger.error(f"[{request_id}] Error in chat stream: {str(e)}")
-                    error_chunk = {
-                        "type": "error",
-                        "data": {
-                            "error": str(e)
-                        }
-                    }
-                    yield f"data: {json.dumps(error_chunk, ensure_ascii=False)}\n\n"
-                    yield "data: [DONE]\n\n"
-
-            return StreamingResponse(
-                stream_generator(),
-                media_type="text/plain",
-                headers={
-                    "Cache-Control": "no-cache",
-                    "Connection": "keep-alive",
-                    "Content-Type": "text/event-stream",
-                }
-            )
+        return StreamingResponse(
+            stream_generator(),
+            media_type="text/plain",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Content-Type": "text/event-stream",
+            }
+        )
 
     except HTTPException:
         raise
