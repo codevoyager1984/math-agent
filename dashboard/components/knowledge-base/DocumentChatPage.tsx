@@ -38,6 +38,7 @@ import {
 import { toast } from 'sonner';
 import { DocumentInput } from '@/api/knowledge';
 import { useRouter } from 'next/navigation';
+import KnowledgePointPreview from './KnowledgePointPreview';
 
 interface DocumentChatPageProps {
   sessionId: string;
@@ -75,6 +76,8 @@ export default function DocumentChatPage({
   const [showExtractedText, setShowExtractedText] = useState(false);
   const [currentReasoning, setCurrentReasoning] = useState('');
   const [showReasoning, setShowReasoning] = useState(true);
+  const [isGeneratingJson, setIsGeneratingJson] = useState(false);
+  const [showKnowledgePreview, setShowKnowledgePreview] = useState(false);
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
@@ -114,36 +117,13 @@ export default function DocumentChatPage({
           const newMessages = [...prev];
           const lastMessage = newMessages[newMessages.length - 1];
           if (lastMessage && lastMessage.role === 'assistant') {
-            lastMessage.content = chunk.data.full_content || (lastMessage.content + chunk.data.content);
+            const newContent = chunk.data.full_content || (lastMessage.content + chunk.data.content);
+            lastMessage.content = newContent;
             
-            // 尝试从content中提取知识点
-            const currentContent = lastMessage.content;
-            if (currentContent && !isStreaming) { // 只在流式结束时解析
-              try {
-                // 尝试解析JSON格式的知识点
-                const jsonMatch = currentContent.match(/```json\n([\s\S]*?)\n```/) || 
-                                currentContent.match(/\{[\s\S]*\}/);
-                if (jsonMatch) {
-                  const jsonContent = JSON.parse(jsonMatch[1] || jsonMatch[0]);
-                  let knowledgePointsArray = null;
-                  
-                  // 处理不同的JSON格式
-                  if (Array.isArray(jsonContent)) {
-                    knowledgePointsArray = jsonContent;
-                  } else if (jsonContent.knowledge_points && Array.isArray(jsonContent.knowledge_points)) {
-                    knowledgePointsArray = jsonContent.knowledge_points;
-                  }
-                  
-                  if (knowledgePointsArray && knowledgePointsArray.length > 0) {
-                    console.log('Extracted knowledge points from content:', knowledgePointsArray);
-                    setCurrentKnowledgePoints(knowledgePointsArray);
-                    lastMessage.knowledgePoints = knowledgePointsArray;
-                    toast.success(`从内容中提取了 ${knowledgePointsArray.length} 个知识点`);
-                  }
-                }
-              } catch (e) {
-                console.debug('Failed to parse knowledge points from content:', e);
-              }
+            // 检测是否开始生成JSON
+            if (newContent.includes('```json') && !isGeneratingJson) {
+              setIsGeneratingJson(true);
+              console.log('Detected JSON generation start');
             }
           }
           return newMessages;
@@ -173,6 +153,7 @@ export default function DocumentChatPage({
       case 'done':
         setCurrentReasoning('');
         setIsStreaming(false);
+        setIsGeneratingJson(false);
         
         // 流式结束时，尝试从最后一条消息的content中提取知识点
         setMessages(prev => {
@@ -198,6 +179,7 @@ export default function DocumentChatPage({
                   console.log('Extracted knowledge points on done:', knowledgePointsArray);
                   setCurrentKnowledgePoints(knowledgePointsArray);
                   lastMessage.knowledgePoints = knowledgePointsArray;
+                  setShowKnowledgePreview(true);
                   toast.success(`AI 生成了 ${knowledgePointsArray.length} 个知识点`);
                 }
               }
@@ -424,47 +406,20 @@ export default function DocumentChatPage({
   ));
 
   return (
-    <Container size="xl" py="md">
-      <Stack gap="lg">
+    <>
+      <style jsx global>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
+      <Container size="xl" py="md" fluid>
+        <Stack gap="lg">
         {/* 页面头部 */}
         <div>
           <Breadcrumbs separator=">" mb="sm">
             {breadcrumbItems}
           </Breadcrumbs>
-          
-          <Group justify="space-between" align="center">
-            <Group gap="md">
-              <IconSparkles size={32} color="var(--mantine-color-blue-6)" />
-              <div>
-                <Title order={2}>AI 智能解析文档</Title>
-                <Group gap="sm" mt="xs">
-                  <Badge variant="light" color="blue" size="lg">
-                    {filename}
-                  </Badge>
-                  <Text size="sm" c="dimmed">
-                    会话ID: {sessionId.slice(0, 8)}...
-                  </Text>
-                </Group>
-              </div>
-            </Group>
-            
-            <Group gap="sm">
-              <Button
-                variant="subtle"
-                leftSection={<IconArrowLeft size={16} />}
-                onClick={() => router.push('/dashboard/knowledge-base')}
-              >
-                返回知识库
-              </Button>
-              <Button
-                variant="subtle"
-                size="sm"
-                onClick={() => setShowExtractedText(!showExtractedText)}
-              >
-                {showExtractedText ? '隐藏' : '查看'}文档内容
-              </Button>
-            </Group>
-          </Group>
         </div>
 
         {/* 提取文本预览 */}
@@ -482,15 +437,12 @@ export default function DocumentChatPage({
         </Collapse>
 
         {/* 主要内容区域 */}
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: '2fr 1fr', 
-          gap: 'var(--mantine-spacing-lg)',
+        <Paper withBorder p="lg" radius="md" style={{ 
           height: 'calc(100vh - 300px)',
-          minHeight: '600px'
+          minHeight: '600px',
+          display: 'flex',
+          flexDirection: 'column'
         }}>
-          {/* 聊天区域 */}
-          <Paper withBorder p="lg" radius="md" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
             <Stack gap="md" style={{ height: '100%' }}>
               <Text fw={600} size="lg">对话历史</Text>
               
@@ -703,6 +655,29 @@ export default function DocumentChatPage({
                             </div>
                           )}
 
+                          {/* JSON生成进度提示 */}
+                          {message.role === 'assistant' && 
+                           message === messages[messages.length - 1] && 
+                           isGeneratingJson && 
+                           isStreaming && (
+                            <Alert icon={<IconSparkles size={16} />} color="blue">
+                              <Group gap="sm">
+                                <Text size="sm" fw={500}>正在生成知识点...</Text>
+                                <div style={{ 
+                                  width: 16, 
+                                  height: 16, 
+                                  border: '2px solid var(--mantine-color-blue-3)',
+                                  borderTop: '2px solid var(--mantine-color-blue-6)',
+                                  borderRadius: '50%',
+                                  animation: 'spin 1s linear infinite'
+                                }} />
+                              </Group>
+                              <Text size="xs" c="dimmed" mt="xs">
+                                AI 正在分析文档内容并生成结构化的数学知识点
+                              </Text>
+                            </Alert>
+                          )}
+
                           {/* 知识点预览 */}
                           {message.knowledgePoints && message.knowledgePoints.length > 0 && (
                             <Alert icon={<IconCheck size={16} />} color="green">
@@ -753,70 +728,23 @@ export default function DocumentChatPage({
               </Group>
             </Stack>
           </Paper>
-
-          {/* 侧边栏 - 知识点状态 */}
-          <Paper withBorder p="lg" radius="md" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-            <Stack gap="md" style={{ height: '100%' }}>
-              <Group justify="space-between">
-                <Text fw={600} size="lg">知识点状态</Text>
-                <Badge variant="light" color={currentKnowledgePoints.length > 0 ? 'green' : 'gray'}>
-                  {currentKnowledgePoints.length} 个
-                </Badge>
-              </Group>
-
-              {currentKnowledgePoints.length > 0 ? (
-                <ScrollArea style={{ flex: 1 }}>
-                  <Stack gap="sm">
-                    {currentKnowledgePoints.map((kp, index) => (
-                      <Card key={index} withBorder p="sm" bg="var(--mantine-color-green-0)">
-                        <Group gap="xs" mb="xs">
-                          <Badge variant="light" size="xs">{kp.category || '通用'}</Badge>
-                          <Text fw={500} size="sm">{kp.title}</Text>
-                        </Group>
-                        <Text size="xs" c="dimmed" lineClamp={2}>
-                          {kp.description}
-                        </Text>
-                        {kp.examples && kp.examples.length > 0 && (
-                          <Text size="xs" c="blue.6" mt="xs">
-                            {kp.examples.length} 个例题
-                          </Text>
-                        )}
-                      </Card>
-                    ))}
-                  </Stack>
-                </ScrollArea>
-              ) : (
-                <Paper p="xl" style={{ textAlign: 'center', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Stack align="center" gap="md">
-                    <IconSparkles size={48} color="var(--mantine-color-gray-4)" />
-                    <Text c="dimmed" size="sm">
-                      还没有生成知识点
-                    </Text>
-                    <Text c="dimmed" size="xs">
-                      开始 AI 分析后，知识点将在这里显示
-                    </Text>
-                  </Stack>
-                </Paper>
-              )}
-
-              <Divider />
-
-              {/* 操作按钮 */}
-              <Group justify="center">
-                <Button
-                  leftSection={<IconCheck size={16} />}
-                  onClick={handleConfirmKnowledgePoints}
-                  disabled={currentKnowledgePoints.length === 0}
-                  size="md"
-                  fullWidth
-                >
-                  确认知识点并继续编辑
-                </Button>
-              </Group>
-            </Stack>
-          </Paper>
-        </div>
       </Stack>
-    </Container>
+      
+      {/* 知识点预览和编辑 */}
+      {showKnowledgePreview && currentKnowledgePoints.length > 0 && (
+        <KnowledgePointPreview
+          opened={showKnowledgePreview}
+          onClose={() => setShowKnowledgePreview(false)}
+          filename={filename}
+          extractedText={extractedTextPreview}
+          knowledgePoints={currentKnowledgePoints}
+          onSuccess={() => {
+            setShowKnowledgePreview(false);
+            router.push('/dashboard/knowledge-base');
+          }}
+        />
+      )}
+      </Container>
+    </>
   );
 }

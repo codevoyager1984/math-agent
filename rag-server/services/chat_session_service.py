@@ -29,7 +29,6 @@ class ChatSession(BaseModel):
     created_at: datetime
     last_activity: datetime
     status: str = "active"  # "active" | "completed" | "expired"
-    max_documents: int = 10
     user_requirements: Optional[str] = None
 
 
@@ -45,7 +44,6 @@ class ChatSessionService:
         self,
         filename: str,
         extracted_text: str,
-        max_documents: int = 10,
         user_requirements: Optional[str] = None
     ) -> str:
         """创建新的聊天会话"""
@@ -55,7 +53,6 @@ class ChatSessionService:
         logger.info(f"[{request_id}] Creating new chat session")
         logger.info(f"[{request_id}] Filename: {filename}")
         logger.info(f"[{request_id}] Extracted text length: {len(extracted_text)} characters")
-        logger.info(f"[{request_id}] Max documents: {max_documents}")
         logger.info(f"[{request_id}] User requirements: {user_requirements or 'None'}")
 
         session = ChatSession(
@@ -64,7 +61,6 @@ class ChatSessionService:
             extracted_text=extracted_text,
             created_at=datetime.now(),
             last_activity=datetime.now(),
-            max_documents=max_documents,
             user_requirements=user_requirements
         )
 
@@ -259,7 +255,6 @@ class ChatSessionService:
 
 文档信息：
 - 文件名：{session.filename}
-- 最大知识点数量：{session.max_documents}
 
 文档内容：
 {session.extracted_text[:8000]}  # 限制文档内容长度避免token超限

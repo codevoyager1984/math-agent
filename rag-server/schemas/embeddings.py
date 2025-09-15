@@ -161,7 +161,6 @@ class KnowledgePointsResponse(BaseModel):
 class DocumentParseRequest(BaseModel):
     """文档解析请求"""
     filename: str = Field(..., description="文件名")
-    max_knowledge_points: int = Field(default=10, ge=1, le=20, description="最大知识点数量")
 
 
 class DocumentParseResponse(BaseModel):
@@ -192,7 +191,6 @@ class ChatSessionCreateRequest(BaseModel):
     """创建聊天会话请求"""
     filename: str
     extracted_text: str
-    max_documents: int = 10
     user_requirements: Optional[str] = None
 
 

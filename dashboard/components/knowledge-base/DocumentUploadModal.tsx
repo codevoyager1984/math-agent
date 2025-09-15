@@ -6,7 +6,6 @@ import {
   Button,
   Text,
   FileInput,
-  NumberInput,
   Textarea,
   Alert,
   Progress,
@@ -56,7 +55,6 @@ export default function DocumentUploadModal({
 }: DocumentUploadModalProps) {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
-  const [maxKnowledgePoints, setMaxKnowledgePoints] = useState(10);
   const [userRequirements, setUserRequirements] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -67,7 +65,6 @@ export default function DocumentUploadModal({
 
   const handleClose = useCallback(() => {
     setFile(null);
-    setMaxKnowledgePoints(10);
     setUserRequirements('');
     setUploading(false);
     setUploadProgress(0);
@@ -111,46 +108,10 @@ export default function DocumentUploadModal({
     setFile(selectedFile);
   };
 
-  const handleUpload = async () => {
-    if (!file) {
-      toast.error('请选择要上传的文件');
-      return;
-    }
-
-    try {
-      setUploading(true);
-      setUploadProgress(0);
-
-      // 模拟上传进度
-      const progressInterval = setInterval(() => {
-        setUploadProgress((prev) => {
-          if (prev >= 90) return prev;
-          return prev + Math.random() * 15;
-        });
-      }, 200);
-
-      const result = await parseDocumentAndCreateSession(file, maxKnowledgePoints, userRequirements);
-
-      clearInterval(progressInterval);
-      setUploadProgress(100);
-
-      // 保存会话结果并导航到分析页面
-      setSessionResult(result);
-      setHasSessionCreated(true);
-
-      toast.success('文档上传成功！跳转到AI分析页面...');
-      
-      // 关闭当前modal并导航到分析页面
-      onClose();
-      router.push(`/dashboard/knowledge-base/chat?sessionId=${result.session_id}&filename=${encodeURIComponent(result.filename)}&preview=${encodeURIComponent(result.extracted_text_preview)}`);
-
-    } catch (error) {
-      console.error('文档上传失败:', error);
-      toast.error('文档上传失败，请重试');
-    } finally {
-      setUploading(false);
-      setTimeout(() => setUploadProgress(0), 1000);
-    }
+  const handleUpload = () => {
+    // 直接跳转到上传页面
+    onClose();
+    router.push('/dashboard/knowledge-base/upload');
   };
 
   // 处理聊天界面生成的知识点
@@ -299,16 +260,6 @@ export default function DocumentUploadModal({
               disabled={uploading}
             />
 
-            {/* 参数设置 */}
-            <NumberInput
-              label="最大知识点数量"
-              description="AI将从文档中提取的最大知识点数量"
-              value={maxKnowledgePoints}
-              onChange={(value) => setMaxKnowledgePoints(Number(value) || 10)}
-              min={1}
-              max={20}
-              disabled={uploading}
-            />
 
             {/* 操作按钮 */}
             <Group justify="space-between" mt="md">

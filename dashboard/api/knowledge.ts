@@ -222,7 +222,6 @@ export interface BatchKnowledgePointsResponse {
 // 解析文档并创建会话（新版本）
 export const parseDocumentAndCreateSession = async (
   file: File,
-  maxDocuments: number = 10,
   userRequirements: string = ''
 ): Promise<DocumentParseSessionResponse> => {
   const formData = new FormData();
@@ -232,7 +231,7 @@ export const parseDocumentAndCreateSession = async (
   }
 
   return await request<DocumentParseSessionResponse>({
-    url: `/knowledge-base/upload-document?max_documents=${maxDocuments}`,
+    url: `/knowledge-base/upload-document`,
     method: 'POST',
     data: formData,
     headers: {

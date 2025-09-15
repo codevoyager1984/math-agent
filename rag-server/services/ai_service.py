@@ -99,7 +99,7 @@ class AIService:
             logger.error(f"[{request_id}] Text generation failed after {total_time:.3f}s: {str(e)}")
             raise
 
-    async def generate_knowledge_points(self, text: str, max_points: int = 10, user_requirements: Optional[str] = None) -> List[KnowledgePointData]:
+    async def generate_knowledge_points(self, text: str, user_requirements: Optional[str] = None) -> List[KnowledgePointData]:
         """Generate knowledge points from text using AI model"""
         # Generate request ID for tracking
         request_id = str(uuid.uuid4())[:8]
@@ -107,7 +107,6 @@ class AIService:
         
         logger.info(f"[{request_id}] Starting knowledge point generation")
         logger.info(f"[{request_id}] Input text length: {len(text)} characters")
-        logger.info(f"[{request_id}] Max knowledge points: {max_points}")
         logger.info(f"[{request_id}] User requirements: {user_requirements or 'None'}")
         logger.info(f"[{request_id}] Document text: {text}")
         
@@ -686,7 +685,6 @@ class AIService:
     async def generate_initial_knowledge_points(
         self,
         extracted_text: str,
-        max_points: int = 10,
         user_requirements: Optional[str] = None,
         request_id: str = None
     ) -> AsyncGenerator[Dict[str, Any], None]:
@@ -695,7 +693,6 @@ class AIService:
 
         Args:
             extracted_text: 提取的文档文本
-            max_points: 最大知识点数量
             user_requirements: 用户要求
             request_id: 请求ID
         """
@@ -703,7 +700,7 @@ class AIService:
             request_id = str(uuid.uuid4())[:8]
 
         logger.info(f"[{request_id}] Generating initial knowledge points (streaming)")
-        logger.info(f"[{request_id}] Text length: {len(extracted_text)} chars, Max points: {max_points}")
+        logger.info(f"[{request_id}] Text length: {len(extracted_text)} chars")
 
         # 准备消息
         system_prompt = self._create_extraction_system_prompt()
@@ -716,7 +713,7 @@ class AIService:
 文档内容（带行号）：
 {numbered_text[:8000]}  # 限制长度避免token超限
 
-请分析这个文档并生成 {max_points} 个数学知识点。"""
+请分析这个文档并生成合适数量的数学知识点。"""
 
         if user_requirements:
             user_content += f"\n\n用户特殊要求：\n{user_requirements}"

@@ -26,7 +26,6 @@ import KnowledgePointCard from '@/components/knowledge-base/KnowledgePointCard';
 import KnowledgePointDetailModal from '@/components/knowledge-base/KnowledgePointDetailModal';
 import SearchFilters from '@/components/knowledge-base/SearchFilters';
 import KnowledgeBaseStats from '@/components/knowledge-base/KnowledgeBaseStats';
-import DocumentUploadModal from '@/components/knowledge-base/DocumentUploadModal';
 import {
   getKnowledgePoints,
   deleteKnowledgePoint,
@@ -73,7 +72,6 @@ export default function KnowledgeBasePage() {
 
   // Modal states
   const [detailOpened, { open: openDetail, close: closeDetail }] = useDisclosure(false);
-  const [uploadOpened, { open: openUpload, close: closeUpload }] = useDisclosure(false);
 
   // 初始化时从 localStorage 加载配置
   useEffect(() => {
@@ -321,17 +319,6 @@ export default function KnowledgeBasePage() {
     });
   };
 
-  // 文档上传成功处理
-  const handleUploadSuccess = () => {
-    // 根据当前模式刷新列表
-    if (isSearchMode && lastSearchQuery) {
-      executeSearch(lastSearchQuery);
-    } else {
-      fetchKnowledgePointsList();
-    }
-    fetchCollectionInfo(); // 刷新集合信息
-    closeUpload();
-  };
 
   return (
     <Container fluid>
@@ -380,7 +367,7 @@ export default function KnowledgeBasePage() {
             </Button>
             <Button
               leftSection={<IconFileUpload size={16} />}
-              onClick={openUpload}
+              onClick={() => router.push('/dashboard/knowledge-base/upload')}
               variant="gradient"
               gradient={{ from: 'blue', to: 'cyan', deg: 90 }}
             >
@@ -455,12 +442,6 @@ export default function KnowledgeBasePage() {
           knowledgePoint={selectedKnowledge}
         />
 
-        {/* 文档上传弹窗 */}
-        <DocumentUploadModal
-          opened={uploadOpened}
-          onClose={closeUpload}
-          onSuccess={handleUploadSuccess}
-        />
       </Stack>
     </Container>
   );

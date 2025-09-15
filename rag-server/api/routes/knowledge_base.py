@@ -536,14 +536,12 @@ async def delete_knowledge_point(document_id: str):
 )
 async def parse_document(
     file: UploadFile = File(...),
-    max_documents: int = Query(10, ge=1, le=20, description="最大知识点数量"),
     user_requirements: Optional[str] = Form(None, description="用户对知识点提取的额外要求")
 ):
     """
     上传文档并创建解析会话
 
     - **file**: 上传的文档文件（支持 PDF, DOCX, TXT, MD 格式）
-    - **max_documents**: 最大知识点数量
     - **user_requirements**: 用户对知识点提取的额外要求（可选）
     """
     # Generate request ID for tracking the entire flow
@@ -554,7 +552,6 @@ async def parse_document(
 
     logger.info(f"[{request_id}] Document upload and session creation started")
     logger.info(f"[{request_id}] File: {file.filename}, Content-Type: {file.content_type}")
-    logger.info(f"[{request_id}] Max documents: {max_documents}")
     logger.info(f"[{request_id}] User requirements: {user_requirements or 'None'}")
 
     try:
@@ -611,7 +608,6 @@ async def parse_document(
         session_id = session_service.create_session(
             filename=file.filename,
             extracted_text=extracted_text,
-            max_documents=max_documents,
             user_requirements=user_requirements
         )
         session_create_time = time.time() - session_create_start
@@ -777,7 +773,6 @@ async def create_chat_session(request: ChatSessionCreateRequest):
         session_id = session_service.create_session(
             filename=request.filename,
             extracted_text=request.extracted_text,
-            max_documents=request.max_documents,
             user_requirements=request.user_requirements
         )
 
@@ -852,7 +847,6 @@ async def chat_stream(session_id: str, request: ChatMessageRequest):
                 try:
                     async for chunk in ai_service.generate_initial_knowledge_points(
                         extracted_text=session.extracted_text,
-                        max_points=session.max_documents,
                         user_requirements=session.user_requirements,
                         request_id=request_id
                     ):

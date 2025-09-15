@@ -19,7 +19,7 @@ import { IconArrowLeft, IconPlus, IconTrash } from '@tabler/icons-react';
 import { useRouter, useParams } from 'next/navigation';
 import { toast } from 'sonner';
 import PageHeader from '@/components/PageHeader/PageHeader';
-import { updateKnowledgePoint, getKnowledgePoint, KnowledgePointInput, Example, KnowledgePoint } from '@/api/knowledge';
+import { updateKnowledgePoint, getKnowledgePoint, DocumentInput, Example, KnowledgePoint } from '@/api/knowledge';
 import { CATEGORY_OPTIONS } from '@/constants/categories';
 
 export default function EditKnowledgePointPage() {
@@ -31,7 +31,7 @@ export default function EditKnowledgePointPage() {
   const [saving, setSaving] = useState(false);
   const [knowledgePoint, setKnowledgePoint] = useState<KnowledgePoint | null>(null);
   
-  const [form, setForm] = useState<KnowledgePointInput>({
+  const [form, setForm] = useState<DocumentInput>({
     title: '',
     description: '',
     category: 'general',
