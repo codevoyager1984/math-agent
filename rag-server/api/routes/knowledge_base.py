@@ -601,12 +601,15 @@ async def parse_document(
                 detail="无法从文档中提取有效文本内容"
             )
 
-        # 创建聊天会话（替代AI处理）
-        logger.info(f"[{request_id}] Creating chat session for document parsing")
+        # 创建文档记录和聊天会话
+        logger.info(f"[{request_id}] Creating document and chat session")
         session_create_start = time.time()
         session_service = get_chat_session_service()
-        session_id = session_service.create_session(
+        document_id, session_id = session_service.create_session_with_document(
             filename=file.filename,
+            original_filename=file.filename,
+            file_size=len(file_content),
+            file_type=file_type,
             extracted_text=extracted_text,
             user_requirements=user_requirements
         )
@@ -1003,7 +1006,8 @@ async def get_chat_session(session_id: str):
             session_id=session.session_id,
             filename=session.filename,
             created_at=session.created_at.isoformat(),
-            status=session.status
+            status=session.status,
+            extracted_text=session.extracted_text
         )
 
     except HTTPException:

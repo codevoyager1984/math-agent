@@ -200,6 +200,7 @@ class ChatSessionResponse(BaseModel):
     filename: str
     created_at: str
     status: str
+    extracted_text: Optional[str] = None
 
 
 class ChatMessageRequest(BaseModel):

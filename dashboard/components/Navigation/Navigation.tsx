@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { IconHome, IconX, IconDatabase, IconBrain } from '@tabler/icons-react';
+import { IconHome, IconX, IconDatabase, IconBrain, IconFileText } from '@tabler/icons-react';
 import { ActionIcon, Box, Flex, Group, ScrollArea, Text } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { LinksGroup } from '@/components/Navigation/Links/Links';
@@ -27,6 +27,11 @@ const MENU_DATA = [
         label: '知识库',
         icon: <IconBrain size={18} />,
         link: PATH_KNOWLEDGE_BASE.list,
+      },
+      {
+        label: '文档管理',
+        icon: <IconFileText size={18} />,
+        link: '/dashboard/documents',
       },
     ],
   },

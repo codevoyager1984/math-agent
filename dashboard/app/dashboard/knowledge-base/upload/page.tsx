@@ -102,7 +102,7 @@ export default function UploadPage() {
       toast.success('文档上传成功！跳转到AI分析页面...');
       
       // 跳转到分析页面
-      router.push(`/dashboard/knowledge-base/chat?sessionId=${result.session_id}&filename=${encodeURIComponent(result.filename)}&preview=${encodeURIComponent(result.extracted_text_preview)}`);
+      router.push(`/dashboard/knowledge-base/chat?sessionId=${result.session_id}&filename=${encodeURIComponent(result.filename)}}`);
 
     } catch (error) {
       console.error('文档上传失败:', error);

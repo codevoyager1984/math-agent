@@ -3,8 +3,13 @@
 """
 import uuid
 from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+from sqlalchemy import and_, desc
+
+from models.document import Document, ChatSession as DBChatSession, ChatMessage as DBChatMessage, ChatSessionStatus
+from models.base import get_db
 from loguru import logger
 
 
@@ -36,64 +41,113 @@ class ChatSessionService:
     """聊天会话管理服务"""
 
     def __init__(self):
-        # 内存存储，生产环境可以考虑使用Redis
+        # 内存存储作为缓存，数据库作为持久化存储
         self.sessions: Dict[str, ChatSession] = {}
-        self.session_timeout = timedelta(hours=2)  # 会话超时时间
 
-    def create_session(
+    def create_session_with_document(
         self,
         filename: str,
+        original_filename: str,
+        file_size: int,
+        file_type: str,
         extracted_text: str,
         user_requirements: Optional[str] = None
-    ) -> str:
+    ) -> tuple[str, str]:
+        """创建文档和会话记录，返回(document_id, session_id)"""
+        from services.document_service import get_document_service
+        
+        # 创建文档记录
+        document_service = get_document_service()
+        document_id = document_service.create_document(
+            filename=filename,
+            original_filename=original_filename,
+            file_size=file_size,
+            file_type=file_type,
+            extracted_text=extracted_text,
+            user_requirements=user_requirements
+        )
+        
+        # 创建会话记录
+        session_id = self.create_session(document_id)
+        
+        return document_id, session_id
+
+    def create_session(self, document_id: str) -> str:
         """创建新的聊天会话"""
         session_id = str(uuid.uuid4())
         request_id = session_id[:8]
 
-        logger.info(f"[{request_id}] Creating new chat session")
-        logger.info(f"[{request_id}] Filename: {filename}")
-        logger.info(f"[{request_id}] Extracted text length: {len(extracted_text)} characters")
-        logger.info(f"[{request_id}] User requirements: {user_requirements or 'None'}")
+        logger.info(f"[{request_id}] Creating new chat session for document: {document_id}")
 
-        session = ChatSession(
-            session_id=session_id,
-            filename=filename,
-            extracted_text=extracted_text,
-            created_at=datetime.now(),
-            last_activity=datetime.now(),
-            user_requirements=user_requirements
-        )
+        try:
+            with get_db() as db:
+                # 检查文档是否存在
+                document = db.query(Document).filter(Document.id == document_id).first()
+                if not document:
+                    raise ValueError(f"Document not found: {document_id}")
 
-        # 添加系统消息
-        system_message = ChatMessage(
-            id=str(uuid.uuid4()),
-            role="system",
-            content=f"开始解析文档：{filename}",
-            timestamp=datetime.now(),
-            message_type="text"
-        )
-        session.messages.append(system_message)
+                # 创建数据库会话记录
+                db_session = DBChatSession(
+                    id=session_id,
+                    document_id=document_id,
+                    status=ChatSessionStatus.ACTIVE,
+                    current_knowledge_points=[],
+                    session_data={}
+                )
+                
+                db.add(db_session)
+                db.commit()
+                db.refresh(db_session)
 
-        self.sessions[session_id] = session
+                # 创建内存会话对象（用于缓存）
+                session = ChatSession(
+                    session_id=session_id,
+                    filename=document.filename,
+                    extracted_text=document.extracted_text,
+                    created_at=db_session.created_at,
+                    last_activity=db_session.last_activity,
+                    user_requirements=document.user_requirements
+                )
 
-        logger.info(f"[{request_id}] Chat session created successfully")
-        logger.info(f"[{request_id}] Session ID: {session_id}")
+                # 添加系统消息
+                system_message = ChatMessage(
+                    id=str(uuid.uuid4()),
+                    role="system",
+                    content=f"开始解析文档：{document.filename}",
+                    timestamp=datetime.now(timezone.utc),
+                    message_type="text"
+                )
+                session.messages.append(system_message)
 
-        return session_id
+                # 同时保存到数据库
+                self._save_message_to_db(session_id, system_message)
+
+                self.sessions[session_id] = session
+
+                logger.info(f"[{request_id}] Chat session created successfully")
+                logger.info(f"[{request_id}] Session ID: {session_id}")
+
+                return session_id
+                
+        except Exception as e:
+            logger.error(f"[{request_id}] Failed to create chat session: {str(e)}")
+            raise
 
     def get_session(self, session_id: str) -> Optional[ChatSession]:
         """获取聊天会话"""
+        # 先从内存缓存获取
         session = self.sessions.get(session_id)
+        
+        if not session:
+            # 从数据库加载
+            session = self._load_session_from_db(session_id)
+            if session:
+                self.sessions[session_id] = session
 
         if not session:
             logger.warning(f"Session not found: {session_id}")
             return None
 
-        # 检查会话是否过期
-        if self._is_session_expired(session):
-            logger.warning(f"Session expired: {session_id}")
-            session.status = "expired"
-            return None
 
         return session
 
@@ -120,17 +174,21 @@ class ChatSessionService:
             role=role,
             content=content,
             reasoning=reasoning,
-            timestamp=datetime.now(),
+            timestamp=datetime.now(timezone.utc),
             message_type=message_type,
             knowledge_points=knowledge_points
         )
 
         session.messages.append(message)
-        session.last_activity = datetime.now()
+        session.last_activity = datetime.now(timezone.utc)
+
+        # 保存消息到数据库
+        self._save_message_to_db(session_id, message)
 
         # 如果是包含知识点的消息，更新当前知识点
         if knowledge_points:
             session.current_knowledge_points = knowledge_points
+            self._update_knowledge_points_in_db(session_id, knowledge_points)
             logger.info(f"[{request_id}] Updated current knowledge points: {len(knowledge_points)} points")
 
         logger.info(f"[{request_id}] Added message to session - Role: {role}, Type: {message_type}")
@@ -184,6 +242,9 @@ class ChatSessionService:
         session.current_knowledge_points = knowledge_points
         session.last_activity = datetime.now()
 
+        # 同时更新数据库
+        self._update_knowledge_points_in_db(session_id, knowledge_points)
+
         logger.info(f"[{request_id}] Updated knowledge points: {len(knowledge_points)} points")
 
         return True
@@ -198,7 +259,7 @@ class ChatSessionService:
 
         request_id = session_id[:8]
         session.status = "completed"
-        session.last_activity = datetime.now()
+        session.last_activity = datetime.now(timezone.utc)
 
         logger.info(f"[{request_id}] Session marked as completed")
 
@@ -216,20 +277,9 @@ class ChatSessionService:
         return False
 
     def cleanup_expired_sessions(self) -> int:
-        """清理过期的会话"""
-        expired_sessions = []
-
-        for session_id, session in self.sessions.items():
-            if self._is_session_expired(session):
-                expired_sessions.append(session_id)
-
-        for session_id in expired_sessions:
-            del self.sessions[session_id]
-
-        if expired_sessions:
-            logger.info(f"Cleaned up {len(expired_sessions)} expired sessions")
-
-        return len(expired_sessions)
+        """清理过期的会话 - 已移除session_timeout逻辑，此方法现在返回0"""
+        # 由于移除了session_timeout逻辑，此方法不再执行任何清理操作
+        return 0
 
     def get_session_stats(self) -> Dict[str, Any]:
         """获取会话统计信息"""
@@ -240,13 +290,9 @@ class ChatSessionService:
         return {
             "total_sessions": total_sessions,
             "active_sessions": active_sessions,
-            "completed_sessions": completed_sessions,
-            "expired_sessions": total_sessions - active_sessions - completed_sessions
+            "completed_sessions": completed_sessions
         }
 
-    def _is_session_expired(self, session: ChatSession) -> bool:
-        """检查会话是否过期"""
-        return datetime.now() - session.last_activity > self.session_timeout
 
     def _create_system_prompt(self, session: ChatSession) -> str:
         """创建系统提示词"""
@@ -297,6 +343,113 @@ class ChatSessionService:
             base_prompt += f"\n\n用户特殊要求：\n{session.user_requirements}"
 
         return base_prompt
+
+    def _save_message_to_db(self, session_id: str, message: ChatMessage) -> bool:
+        """保存消息到数据库"""
+        try:
+            with get_db() as db:
+                db_message = DBChatMessage(
+                    id=message.id,
+                    session_id=session_id,
+                    role=message.role,
+                    content=message.content,
+                    reasoning=message.reasoning,
+                    message_type=message.message_type,
+                    knowledge_points=message.knowledge_points,
+                    message_data={}
+                )
+                
+                db.add(db_message)
+                db.commit()
+                return True
+                
+        except Exception as e:
+            logger.error(f"Failed to save message to DB: {str(e)}")
+            return False
+
+    def _load_session_from_db(self, session_id: str) -> Optional[ChatSession]:
+        """从数据库加载会话"""
+        try:
+            with get_db() as db:
+                # 获取会话记录
+                db_session = db.query(DBChatSession).filter(DBChatSession.id == session_id).first()
+                if not db_session:
+                    return None
+
+                # 获取关联的文档
+                document = db.query(Document).filter(Document.id == db_session.document_id).first()
+                if not document:
+                    logger.error(f"Document not found for session: {session_id}")
+                    return None
+
+                # 获取消息历史
+                db_messages = db.query(DBChatMessage).filter(
+                    DBChatMessage.session_id == session_id
+                ).order_by(DBChatMessage.created_at).all()
+
+                # 转换为内存对象
+                messages = []
+                for db_msg in db_messages:
+                    msg = ChatMessage(
+                        id=db_msg.id,
+                        role=db_msg.role,
+                        content=db_msg.content,
+                        reasoning=db_msg.reasoning,
+                        timestamp=db_msg.created_at,
+                        message_type=db_msg.message_type,
+                        knowledge_points=db_msg.knowledge_points
+                    )
+                    messages.append(msg)
+
+                # 创建会话对象
+                session = ChatSession(
+                    session_id=session_id,
+                    filename=document.filename,
+                    extracted_text=document.extracted_text,
+                    messages=messages,
+                    current_knowledge_points=db_session.current_knowledge_points or [],
+                    created_at=db_session.created_at,
+                    last_activity=db_session.last_activity,
+                    status=db_session.status.value,
+                    user_requirements=document.user_requirements
+                )
+
+                logger.info(f"Loaded session from DB: {session_id}")
+                return session
+                
+        except Exception as e:
+            logger.error(f"Failed to load session from DB: {str(e)}")
+            return None
+
+    def _update_session_status_in_db(self, session_id: str, status: ChatSessionStatus) -> bool:
+        """更新数据库中的会话状态"""
+        try:
+            with get_db() as db:
+                db_session = db.query(DBChatSession).filter(DBChatSession.id == session_id).first()
+                if db_session:
+                    db_session.status = status
+                    db_session.last_activity = datetime.now(timezone.utc)
+                    db.commit()
+                    return True
+                return False
+        except Exception as e:
+            logger.error(f"Failed to update session status in DB: {str(e)}")
+            return False
+
+    def _update_knowledge_points_in_db(self, session_id: str, knowledge_points: List[Dict[str, Any]]) -> bool:
+        """更新数据库中的知识点"""
+        try:
+            with get_db() as db:
+                db_session = db.query(DBChatSession).filter(DBChatSession.id == session_id).first()
+                if db_session:
+                    db_session.current_knowledge_points = knowledge_points
+                    db_session.last_activity = datetime.now(timezone.utc)
+                    db.commit()
+                    return True
+                return False
+        except Exception as e:
+            logger.error(f"Failed to update knowledge points in DB: {str(e)}")
+            return False
 
 
 # 全局会话服务实例

@@ -25,11 +25,8 @@ import {
   IconSend,
   IconUser,
   IconRobot,
-  IconBrain,
   IconCheck,
   IconX,
-  IconChevronDown,
-  IconChevronUp,
   IconInfoCircle,
   IconSparkles,
   IconArrowLeft,
@@ -61,6 +58,145 @@ interface StreamChunk {
   data: any;
 }
 
+// 工具函数：从带行号的文本中按行号提取内容
+function extractContentByLines(numberedText: string, startLine: number, endLine: number): string {
+  const lines = numberedText.split('\n');
+  
+  console.log(`Extracting lines ${startLine}-${endLine} from ${lines.length} total lines`);
+  
+  // 找到匹配的行号并提取内容
+  const extractedLines = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // 匹配行号格式 "001: 内容" 或 "  1: 内容"
+    const match = line.match(/^\s*(\d+):\s*(.*)$/);
+    if (match) {
+      const lineNumber = parseInt(match[1]);
+      const content = match[2];
+      
+      if (lineNumber >= startLine && lineNumber <= endLine) {
+        extractedLines.push(content);
+      }
+    }
+  }
+  
+  const result = extractedLines.join('\n').trim();
+  console.log(`Extracted content (${result.length} chars):`, result.substring(0, 200) + '...');
+  
+  return result;
+}
+
+// 工具函数：将原始文本转换为带行号格式
+function addLineNumbers(text: string): string {
+  const lines = text.split('\n');
+  return lines.map((line, index) => `${(index + 1).toString().padStart(3, ' ')}: ${line}`).join('\n');
+}
+
+// 工具函数：从位置信息解析知识点
+function parseKnowledgePointsFromPositions(originalText: string, positionData: any[]): DocumentInput[] {
+  const knowledgePoints: DocumentInput[] = [];
+  console.log('Starting to parse', positionData.length, 'knowledge points');
+  
+  // 将原始文本转换为带行号格式，匹配AI处理的格式
+  const numberedText = addLineNumbers(originalText);
+  console.log('Created numbered text, total lines:', numberedText.split('\n').length);
+  
+  for (let i = 0; i < positionData.length; i++) {
+    const kpData = positionData[i];
+    console.log(`Processing knowledge point ${i + 1}:`, kpData);
+    
+    // 提取描述内容
+    const descRange = kpData.description_range || {};
+    console.log(`Description range for KP ${i + 1}:`, descRange);
+    
+    let description = '';
+    if (descRange.start_line && descRange.end_line) {
+      description = extractContentByLines(
+        numberedText,
+        descRange.start_line,
+        descRange.end_line
+      );
+    } else {
+      // 如果没有范围信息，使用已有的描述或标题
+      description = kpData.description || kpData.title || '未命名知识点';
+    }
+    console.log(`Extracted description for KP ${i + 1}:`, description.substring(0, 100) + '...');
+    
+    // 提取例题
+    const examples = [];
+    const examplesData = kpData.examples || [];
+    console.log(`Processing ${examplesData.length} examples for KP ${i + 1}`);
+    
+    for (let j = 0; j < examplesData.length; j++) {
+      const exData = examplesData[j];
+      console.log(`Processing example ${j + 1}:`, exData);
+      
+      const questionRange = exData.question_range || {};
+      const solutionRange = exData.solution_range || {};
+      
+      console.log(`Question range:`, questionRange);
+      console.log(`Solution range:`, solutionRange);
+      
+      let question = '';
+      let solution = '';
+      
+      // 提取题目
+      if (questionRange.start_line && questionRange.end_line) {
+        question = extractContentByLines(
+          numberedText,
+          questionRange.start_line,
+          questionRange.end_line
+        );
+      } else if (exData.question) {
+        question = exData.question;
+      }
+      
+      // 提取解答
+      if (solutionRange.start_line && solutionRange.end_line) {
+        solution = extractContentByLines(
+          numberedText,
+          solutionRange.start_line,
+          solutionRange.end_line
+        );
+      } else if (exData.solution) {
+        solution = exData.solution;
+      }
+      
+      console.log(`Extracted question:`, question);
+      console.log(`Extracted solution:`, solution);
+      
+      if (question.trim() && solution.trim()) {
+        examples.push({
+          question: question.trim(),
+          solution: solution.trim(),
+          difficulty: exData.difficulty || 'medium'
+        });
+        console.log(`Added example ${j + 1} successfully`);
+      } else {
+        console.warn(`Failed to extract example ${j + 1}: question="${question}", solution="${solution}"`);
+        console.warn(`Question range:`, questionRange, `Solution range:`, solutionRange);
+      }
+    }
+    
+    console.log(`Total examples extracted for KP ${i + 1}:`, examples.length);
+    
+    // 创建知识点
+    const kp: DocumentInput = {
+      title: kpData.title || '未命名知识点',
+      description: description || kpData.description || '',
+      category: kpData.category || 'general',
+      examples,
+      tags: kpData.tags || []
+    };
+    
+    knowledgePoints.push(kp);
+  }
+  
+  console.log('Finished parsing, total knowledge points:', knowledgePoints.length);
+  return knowledgePoints;
+}
+
 export default function DocumentChatPage({
   sessionId,
   filename,
@@ -75,9 +211,9 @@ export default function DocumentChatPage({
   const [isInitialGeneration, setIsInitialGeneration] = useState(true);
   const [showExtractedText, setShowExtractedText] = useState(false);
   const [currentReasoning, setCurrentReasoning] = useState('');
-  const [showReasoning, setShowReasoning] = useState(true);
   const [isGeneratingJson, setIsGeneratingJson] = useState(false);
   const [showKnowledgePreview, setShowKnowledgePreview] = useState(false);
+  const [fullExtractedText, setFullExtractedText] = useState<string>(extractedTextPreview);
 
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
@@ -92,8 +228,38 @@ export default function DocumentChatPage({
   }, []);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, scrollToBottom]);
+    // 只在非流式输出状态下自动滚动
+    if (!isStreaming) {
+      scrollToBottom();
+    }
+  }, [messages, scrollToBottom, isStreaming]);
+
+  // 获取会话的完整提取文本
+  useEffect(() => {
+    const fetchSessionData = async () => {
+      try {
+        console.log('Fetching session data for:', sessionId);
+        const response = await fetch(`/api/knowledge-base/chat-session/${sessionId}`);
+        if (response.ok) {
+          const sessionData = await response.json();
+          console.log('Session data received:', sessionData);
+          if (sessionData.extracted_text) {
+            setFullExtractedText(sessionData.extracted_text);
+            console.log('Loaded full extracted text:', sessionData.extracted_text.length, 'characters');
+            console.log('First 500 chars:', sessionData.extracted_text.substring(0, 500));
+          } else {
+            console.warn('No extracted_text in session data, using preview');
+          }
+        } else {
+          console.error('Failed to fetch session data:', response.status);
+        }
+      } catch (error) {
+        console.warn('Failed to fetch session data:', error);
+      }
+    };
+    
+    fetchSessionData();
+  }, [sessionId]);
 
   // 处理流式数据块
   const handleStreamChunk = useCallback((chunk: StreamChunk) => {
@@ -120,7 +286,7 @@ export default function DocumentChatPage({
             const newContent = chunk.data.full_content || (lastMessage.content + chunk.data.content);
             lastMessage.content = newContent;
             
-            // 检测是否开始生成JSON
+            // 检测是否开始生成JSON（只在第一次检测到时触发）
             if (newContent.includes('```json') && !isGeneratingJson) {
               setIsGeneratingJson(true);
               console.log('Detected JSON generation start');
@@ -166,21 +332,79 @@ export default function DocumentChatPage({
                               lastMessage.content.match(/\{[\s\S]*"knowledge_points"[\s\S]*\}/);
               if (jsonMatch) {
                 const jsonContent = JSON.parse(jsonMatch[1] || jsonMatch[0]);
-                let knowledgePointsArray = null;
+                let positionData = null;
                 
                 // 处理不同的JSON格式
+                let rawData = null;
                 if (Array.isArray(jsonContent)) {
-                  knowledgePointsArray = jsonContent;
+                  rawData = jsonContent;
                 } else if (jsonContent.knowledge_points && Array.isArray(jsonContent.knowledge_points)) {
-                  knowledgePointsArray = jsonContent.knowledge_points;
+                  rawData = jsonContent.knowledge_points;
                 }
                 
-                if (knowledgePointsArray && knowledgePointsArray.length > 0) {
-                  console.log('Extracted knowledge points on done:', knowledgePointsArray);
-                  setCurrentKnowledgePoints(knowledgePointsArray);
-                  lastMessage.knowledgePoints = knowledgePointsArray;
-                  setShowKnowledgePreview(true);
-                  toast.success(`AI 生成了 ${knowledgePointsArray.length} 个知识点`);
+                if (rawData && rawData.length > 0) {
+                  console.log('Extracted raw data:', JSON.stringify(rawData, null, 2));
+                  
+                  // 检查数据格式：是位置信息还是直接内容
+                  const firstItem = rawData[0];
+                  const isPositionFormat = firstItem.description_range || firstItem.examples?.some((ex: any) => ex.question_range || ex.solution_range);
+                  
+                  console.log('Is position format:', isPositionFormat);
+                  
+                  let knowledgePointsArray: DocumentInput[] = [];
+                  
+                  if (isPositionFormat) {
+                    // 位置信息格式，需要解析行号
+                    console.log('Using position-based parsing');
+                    console.log('Full extracted text length:', fullExtractedText.length);
+                    console.log('Preview text length:', extractedTextPreview.length);
+                    console.log('Are they the same?', fullExtractedText === extractedTextPreview);
+                    
+                    // 显示文本的前几行和后几行
+                    const lines = fullExtractedText.split('\n');
+                    console.log('Total lines in full text:', lines.length);
+                    console.log('First 5 lines:', lines.slice(0, 5));
+                    console.log('Lines 110-115:', lines.slice(109, 115));
+                    console.log('Lines 220-230:', lines.slice(219, 230));
+                    
+                    knowledgePointsArray = parseKnowledgePointsFromPositions(fullExtractedText, rawData);
+                  } else {
+                    // 直接内容格式，直接使用
+                    console.log('Using direct content format');
+                    knowledgePointsArray = rawData.map((kp: any) => ({
+                      title: kp.title || '未命名知识点',
+                      description: kp.description || '',
+                      category: kp.category || 'general',
+                      examples: (kp.examples || []).map((ex: any) => ({
+                        question: ex.question || '',
+                        solution: ex.solution || '',
+                        difficulty: ex.difficulty || 'medium'
+                      })),
+                      tags: kp.tags || []
+                    }));
+                  }
+                  
+                  console.log('Final parsed knowledge points:', JSON.stringify(knowledgePointsArray, null, 2));
+                  
+                  if (knowledgePointsArray.length > 0) {
+                    // 验证解析结果
+                    knowledgePointsArray.forEach((kp, index) => {
+                      console.log(`Knowledge Point ${index + 1}:`, {
+                        title: kp.title,
+                        description: kp.description?.substring(0, 100) + '...',
+                        examples: kp.examples?.length || 0,
+                        tags: kp.tags?.length || 0
+                      });
+                    });
+                    
+                    setCurrentKnowledgePoints(knowledgePointsArray);
+                    lastMessage.knowledgePoints = knowledgePointsArray;
+                    setShowKnowledgePreview(true);
+                    toast.success(`AI 生成了 ${knowledgePointsArray.length} 个知识点`);
+                  } else {
+                    console.warn('No knowledge points were successfully parsed');
+                    toast.warning('知识点解析失败，请检查AI输出格式');
+                  }
                 }
               }
             } catch (e) {
@@ -438,13 +662,13 @@ export default function DocumentChatPage({
 
         {/* 主要内容区域 */}
         <Paper withBorder p="lg" radius="md" style={{ 
-          height: 'calc(100vh - 300px)',
+          height: 'calc(100vh - 200px)',
           minHeight: '600px',
           display: 'flex',
           flexDirection: 'column'
         }}>
             <Stack gap="md" style={{ height: '100%' }}>
-              <Text fw={600} size="lg">对话历史</Text>
+              <Text fw={600} size="lg">智能解析</Text>
               
               <ScrollArea 
                 ref={scrollAreaRef} 
@@ -506,153 +730,61 @@ export default function DocumentChatPage({
 
                           {/* AI 思考过程 */}
                           {message.role === 'assistant' && (message.reasoning || currentReasoning) && (
-                            <Card withBorder p="sm" style={{ backgroundColor: 'var(--mantine-color-yellow-0)' }}>
-                              <Group gap="xs" mb="xs">
-                                <IconBrain size={16} color="var(--mantine-color-yellow-7)" />
-                                <Text size="sm" fw={500} c="yellow.7">
-                                  AI 思考过程
-                                </Text>
-                                <ActionIcon
-                                  variant="subtle"
-                                  size="xs"
-                                  onClick={() => setShowReasoning(!showReasoning)}
-                                >
-                                  {showReasoning ? <IconChevronUp size={12} /> : <IconChevronDown size={12} />}
-                                </ActionIcon>
-                              </Group>
-                              <Collapse in={showReasoning}>
-                                <Box p="xs">
-                                  <Text size="xs" style={{ whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
-                                    {/* 流式过程中优先显示实时状态，否则显示存储的内容 */}
-                                    {isStreaming && message === messages[messages.length - 1]
-                                      ? currentReasoning
-                                      : message.reasoning
+                            <Text 
+                              size="sm" 
+                              c="dimmed" 
+                              style={{ 
+                                whiteSpace: 'pre-wrap', 
+                                lineHeight: 1.5,
+                                fontStyle: 'italic',
+                                marginBottom: 'var(--mantine-spacing-sm)'
+                              }}
+                            >
+                              {/* 流式过程中优先显示实时状态，否则显示存储的内容 */}
+                              {isStreaming && message === messages[messages.length - 1]
+                                ? currentReasoning
+                                : message.reasoning
+                              }
+                              {isStreaming && message === messages[messages.length - 1] && currentReasoning && (
+                                <Text 
+                                  component="span" 
+                                  c="yellow.7" 
+                                  fw={700}
+                                  style={{ 
+                                    animation: 'blink 1s infinite',
+                                    '@keyframes blink': {
+                                      '0%, 50%': { opacity: 1 },
+                                      '51%, 100%': { opacity: 0 }
                                     }
-                                    {isStreaming && message === messages[messages.length - 1] && currentReasoning && (
-                                      <Text 
-                                        component="span" 
-                                        c="yellow.7" 
-                                        fw={700}
-                                        style={{ 
-                                          animation: 'blink 1s infinite',
-                                          '@keyframes blink': {
-                                            '0%, 50%': { opacity: 1 },
-                                            '51%, 100%': { opacity: 0 }
-                                          }
-                                        }}
-                                      >
-                                        ▋
-                                      </Text>
-                                    )}
-                                  </Text>
-                                </Box>
-                              </Collapse>
-                            </Card>
+                                  }}
+                                >
+                                  ▋
+                                </Text>
+                              )}
+                            </Text>
                           )}
 
                           {/* 消息内容 */}
                           {message.content && (
-                            <div>
-                              {/* 尝试解析JSON内容 */}
-                              {(() => {
-                                try {
-                                  // 尝试解析JSON格式的知识点
-                                  const jsonMatch = message.content.match(/```json\n([\s\S]*?)\n```/);
-                                  if (jsonMatch) {
-                                    const jsonContent = JSON.parse(jsonMatch[1]);
-                                    if (Array.isArray(jsonContent)) {
-                                      return (
-                                        <Stack gap="sm">
-                                          <Text size="sm" c="dimmed">AI 生成的知识点：</Text>
-                                          {jsonContent.map((kp, index) => (
-                                            <Card key={index} withBorder p="sm" bg="var(--mantine-color-blue-0)">
-                                              <Stack gap="xs">
-                                                <Group gap="xs">
-                                                  <Badge variant="light" size="sm">{kp.category || '通用'}</Badge>
-                                                  <Text fw={600} size="sm">{kp.title}</Text>
-                                                </Group>
-                                                <Text size="xs" c="dimmed">{kp.description}</Text>
-                                                {kp.examples && kp.examples.length > 0 && (
-                                                  <div>
-                                                    <Text size="xs" fw={500} mb="xs">例题：</Text>
-                                                    {kp.examples.map((ex: any, exIndex: number) => (
-                                                      <Card key={exIndex} withBorder p="xs" bg="white" mb="xs">
-                                                        <Text size="xs" fw={500}>题目：{ex.question}</Text>
-                                                        <Text size="xs" c="dimmed">解答：{ex.solution}</Text>
-                                                        {ex.difficulty && (
-                                                          <Badge size="xs" variant="outline" mt="xs">
-                                                            {ex.difficulty}
-                                                          </Badge>
-                                                        )}
-                                                      </Card>
-                                                    ))}
-                                                  </div>
-                                                )}
-                                                {kp.tags && kp.tags.length > 0 && (
-                                                  <Group gap="xs">
-                                                    {kp.tags.map((tag: any, tagIndex: number) => (
-                                                      <Badge key={tagIndex} variant="outline" size="xs">
-                                                        {tag}
-                                                      </Badge>
-                                                    ))}
-                                                  </Group>
-                                                )}
-                                              </Stack>
-                                            </Card>
-                                          ))}
-                                        </Stack>
-                                      );
+                            <Text style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                              {message.content}
+                              {isStreaming && message === messages[messages.length - 1] && (
+                                <Text 
+                                  component="span" 
+                                  c="blue.6" 
+                                  fw={700}
+                                  style={{ 
+                                    animation: 'blink 1s infinite',
+                                    '@keyframes blink': {
+                                      '0%, 50%': { opacity: 1 },
+                                      '51%, 100%': { opacity: 0 }
                                     }
-                                  }
-                                  
-                                  // 如果不是知识点格式，显示原文本
-                                  return (
-                                    <Text style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
-                                      {message.content}
-                                      {isStreaming && message === messages[messages.length - 1] && (
-                                        <Text 
-                                          component="span" 
-                                          c="blue.6" 
-                                          fw={700}
-                                          style={{ 
-                                            animation: 'blink 1s infinite',
-                                            '@keyframes blink': {
-                                              '0%, 50%': { opacity: 1 },
-                                              '51%, 100%': { opacity: 0 }
-                                            }
-                                          }}
-                                        >
-                                          ▋
-                                        </Text>
-                                      )}
-                                    </Text>
-                                  );
-                                } catch (e) {
-                                  // 解析失败，显示原文本
-                                  return (
-                                    <Text style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
-                                      {message.content}
-                                      {isStreaming && message === messages[messages.length - 1] && (
-                                        <Text 
-                                          component="span" 
-                                          c="blue.6" 
-                                          fw={700}
-                                          style={{ 
-                                            animation: 'blink 1s infinite',
-                                            '@keyframes blink': {
-                                              '0%, 50%': { opacity: 1 },
-                                              '51%, 100%': { opacity: 0 }
-                                            }
-                                          }}
-                                        >
-                                          ▋
-                                        </Text>
-                                      )}
-                                    </Text>
-                                  );
-                                }
-                              })()}
-                            </div>
+                                  }}
+                                >
+                                  ▋
+                                </Text>
+                              )}
+                            </Text>
                           )}
 
                           {/* JSON生成进度提示 */}
@@ -680,16 +812,63 @@ export default function DocumentChatPage({
 
                           {/* 知识点预览 */}
                           {message.knowledgePoints && message.knowledgePoints.length > 0 && (
-                            <Alert icon={<IconCheck size={16} />} color="green">
-                              <Text size="sm" fw={500} mb="xs">
-                                生成了 {message.knowledgePoints.length} 个知识点
-                              </Text>
-                              <Group gap="xs" wrap="wrap">
-                                {message.knowledgePoints.map((kp, index) => (
-                                  <Badge key={index} variant="light" size="sm">
-                                    {kp.title}
-                                  </Badge>
-                                ))}
+                            <Alert 
+                              icon={<IconCheck size={16} />} 
+                              color="green"
+                              style={{ 
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                border: '1px solid var(--mantine-color-green-3)'
+                              }}
+                              onClick={() => {
+                                setCurrentKnowledgePoints(message.knowledgePoints || []);
+                                setShowKnowledgePreview(true);
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.backgroundColor = 'var(--mantine-color-green-1)';
+                                e.currentTarget.style.transform = 'translateY(-1px)';
+                                e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.1)';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.backgroundColor = '';
+                                e.currentTarget.style.transform = '';
+                                e.currentTarget.style.boxShadow = '';
+                              }}
+                            >
+                              <Group justify="space-between" align="flex-start">
+                                <div style={{ flex: 1 }}>
+                                  <Group gap="sm" mb="xs">
+                                    <Text size="sm" fw={500}>
+                                      生成了 {message.knowledgePoints.length} 个知识点
+                                    </Text>
+                                    <Badge variant="light" color="blue" size="sm">
+                                      点击查看详情
+                                    </Badge>
+                                  </Group>
+                                  <Group gap="xs" wrap="wrap">
+                                    {message.knowledgePoints.slice(0, 5).map((kp, index) => (
+                                      <Badge key={index} variant="light" size="sm">
+                                        {kp.title}
+                                      </Badge>
+                                    ))}
+                                    {message.knowledgePoints.length > 5 && (
+                                      <Badge variant="outline" size="sm" c="dimmed">
+                                        +{message.knowledgePoints.length - 5} 更多...
+                                      </Badge>
+                                    )}
+                                  </Group>
+                                </div>
+                                <ActionIcon 
+                                  variant="subtle" 
+                                  color="green"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setCurrentKnowledgePoints(message.knowledgePoints || []);
+                                    setShowKnowledgePreview(true);
+                                  }}
+                                >
+                                  <IconSparkles size={16} />
+                                </ActionIcon>
                               </Group>
                             </Alert>
                           )}
@@ -699,6 +878,52 @@ export default function DocumentChatPage({
                   ))}
                 </Stack>
               </ScrollArea>
+
+              {/* 当前知识点状态 */}
+              {currentKnowledgePoints.length > 0 && (
+                <Alert 
+                  icon={<IconSparkles size={16} />} 
+                  color="blue"
+                  style={{ 
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    border: '1px solid var(--mantine-color-blue-3)'
+                  }}
+                  onClick={() => setShowKnowledgePreview(true)}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--mantine-color-blue-1)';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                    e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.1)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '';
+                    e.currentTarget.style.transform = '';
+                    e.currentTarget.style.boxShadow = '';
+                  }}
+                >
+                  <Group justify="space-between" align="center">
+                    <Group gap="sm">
+                      <Text size="sm" fw={500}>
+                        已生成 {currentKnowledgePoints.length} 个知识点
+                      </Text>
+                      <Badge variant="light" color="green" size="sm">
+                        点击编辑和导入
+                      </Badge>
+                    </Group>
+                    <Button 
+                      size="xs" 
+                      variant="light" 
+                      color="blue"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowKnowledgePreview(true);
+                      }}
+                    >
+                      查看详情
+                    </Button>
+                  </Group>
+                </Alert>
+              )}
 
               <Divider />
 
@@ -736,7 +961,7 @@ export default function DocumentChatPage({
           opened={showKnowledgePreview}
           onClose={() => setShowKnowledgePreview(false)}
           filename={filename}
-          extractedText={extractedTextPreview}
+          extractedText={fullExtractedText}
           knowledgePoints={currentKnowledgePoints}
           onSuccess={() => {
             setShowKnowledgePreview(false);

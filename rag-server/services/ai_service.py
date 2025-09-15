@@ -480,7 +480,8 @@ class AIService:
         messages: List[Dict[str, str]],
         request_id: str = None,
         temperature: float = 0.7,
-        max_tokens: int = 4000
+        max_tokens: int = 4000,
+        extracted_text: str = None
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         流式聊天响应
@@ -618,7 +619,9 @@ class AIService:
                                     if 'message' in choice:
                                         message = choice['message']
                                         if message.get('content'):
-                                            # 尝试解析知识点JSON
+                                            # 尝试解析知识点JSON（需要传入原始文本进行行号解析）
+                                            # 注意：这里我们需要从会话中获取原始文本，但在流式响应中无法直接访问
+                                            # 暂时使用简单提取，后续可以考虑在调用时传入原始文本
                                             try:
                                                 knowledge_points = self._extract_knowledge_points_from_content(message['content'])
                                                 if knowledge_points:
@@ -661,8 +664,8 @@ class AIService:
                 }
             }
 
-    def _extract_knowledge_points_from_content(self, content: str) -> Optional[List[Dict[str, Any]]]:
-        """从内容中提取知识点JSON"""
+    def _extract_knowledge_points_from_content(self, content: str, original_text: str = None) -> Optional[List[Dict[str, Any]]]:
+        """从内容中提取知识点JSON并解析实际内容"""
         try:
             # 尝试找到JSON内容
             start_idx = content.find('{')
@@ -675,11 +678,33 @@ class AIService:
             parsed_data = json.loads(json_content)
 
             if "knowledge_points" in parsed_data:
-                return parsed_data["knowledge_points"]
+                # 如果有原始文本，使用行号解析实际内容
+                if original_text:
+                    knowledge_point_objects = self._create_knowledge_points_from_positions(original_text, parsed_data)
+                    # 转换为字典格式返回
+                    return [
+                        {
+                            "title": kp.title,
+                            "description": kp.description,
+                            "category": kp.category,
+                            "examples": [
+                                {
+                                    "question": ex.question,
+                                    "solution": ex.solution,
+                                    "difficulty": ex.difficulty
+                                } for ex in kp.examples
+                            ],
+                            "tags": kp.tags
+                        } for kp in knowledge_point_objects
+                    ]
+                else:
+                    # 没有原始文本，直接返回JSON中的数据
+                    return parsed_data["knowledge_points"]
 
             return None
 
-        except (json.JSONDecodeError, Exception):
+        except (json.JSONDecodeError, Exception) as e:
+            logger.warning(f"Failed to extract knowledge points: {e}")
             return None
 
     async def generate_initial_knowledge_points(
@@ -711,7 +736,7 @@ class AIService:
 
         user_content = f"""
 文档内容（带行号）：
-{numbered_text[:8000]}  # 限制长度避免token超限
+{numbered_text}
 
 请分析这个文档并生成合适数量的数学知识点。"""
 
@@ -731,8 +756,8 @@ class AIService:
             }
         ]
 
-        # 使用流式聊天方法
-        async for chunk in self.stream_chat_response(messages, request_id):
+        # 使用流式聊天方法，并传入原始文本用于知识点解析
+        async for chunk in self.stream_chat_response(messages, request_id, extracted_text=extracted_text):
             yield chunk
 
 

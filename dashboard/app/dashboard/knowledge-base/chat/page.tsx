@@ -11,6 +11,7 @@ export default function ChatPage() {
   const router = useRouter();
   const [showPreview, setShowPreview] = useState(false);
   const [knowledgePoints, setKnowledgePoints] = useState<DocumentInput[]>([]);
+  const [fullExtractedText, setFullExtractedText] = useState<string>('');
   
   const sessionId = searchParams.get('sessionId');
   const filename = searchParams.get('filename');
@@ -18,10 +19,36 @@ export default function ChatPage() {
 
   // 如果缺少必要参数，返回知识库页面
   useEffect(() => {
-    if (!sessionId || !filename || !preview) {
+    if (!sessionId || !filename) {
       router.push('/dashboard/knowledge-base');
     }
-  }, [sessionId, filename, preview, router]);
+  }, [sessionId, filename, router]);
+
+  // 获取会话的完整提取文本
+  useEffect(() => {
+    const fetchSessionData = async () => {
+      if (!sessionId) return;
+      
+      try {
+        console.log('Fetching session data for:', sessionId);
+        const response = await fetch(`/api/knowledge-base/chat-session/${sessionId}`);
+        if (response.ok) {
+          const sessionData = await response.json();
+          console.log('Session data received:', sessionData);
+          if (sessionData.extracted_text) {
+            setFullExtractedText(sessionData.extracted_text);
+            console.log('Loaded full extracted text:', sessionData.extracted_text.length, 'characters');
+          }
+        } else {
+          console.error('Failed to fetch session data:', response.status);
+        }
+      } catch (error) {
+        console.error('Error fetching session data:', error);
+      }
+    };
+    
+    fetchSessionData();
+  }, [sessionId]);
 
   const handleKnowledgePointsReady = (points: DocumentInput[]) => {
     setKnowledgePoints(points);
@@ -37,7 +64,7 @@ export default function ChatPage() {
     router.push('/dashboard/knowledge-base');
   };
 
-  if (!sessionId || !filename || !preview) {
+  if (!sessionId || !filename) {
     return null; // 或者显示加载状态
   }
 
@@ -46,7 +73,7 @@ export default function ChatPage() {
       <DocumentChatPage
         sessionId={sessionId}
         filename={decodeURIComponent(filename)}
-        extractedTextPreview={decodeURIComponent(preview)}
+        extractedTextPreview={preview ? decodeURIComponent(preview) : ''}
         onKnowledgePointsReady={handleKnowledgePointsReady}
       />
       
@@ -56,7 +83,7 @@ export default function ChatPage() {
           opened={showPreview}
           onClose={handlePreviewClose}
           filename={decodeURIComponent(filename)}
-          extractedText={decodeURIComponent(preview)}
+          extractedText={fullExtractedText}
           knowledgePoints={knowledgePoints}
           onSuccess={handleSuccess}
         />

@@ -31,6 +31,11 @@ def get_db_session():
     finally:
         db.close()
 
+# Context manager to get the database session
+def get_db():
+    """Get database session as context manager"""
+    return SessionLocal()
+
 
 class BaseModel(Base):
     __abstract__ = True
