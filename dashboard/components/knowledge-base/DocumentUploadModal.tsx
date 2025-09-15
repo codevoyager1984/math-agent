@@ -27,6 +27,7 @@ import {
   IconCheck,
   IconX,
   IconInfoCircle,
+  IconRefresh,
 } from '@tabler/icons-react';
 import { toast } from 'sonner';
 import { parseDocument, DocumentParseResponse } from '@/api/knowledge';
@@ -59,6 +60,7 @@ export default function DocumentUploadModal({
   const [uploadProgress, setUploadProgress] = useState(0);
   const [parseResult, setParseResult] = useState<DocumentParseResponse | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [hasParseResult, setHasParseResult] = useState(false);
 
   const handleClose = useCallback(() => {
     setFile(null);
@@ -68,6 +70,7 @@ export default function DocumentUploadModal({
     setUploadProgress(0);
     setParseResult(null);
     setShowPreview(false);
+    setHasParseResult(false);
     onClose();
   }, [onClose]);
 
@@ -130,12 +133,52 @@ export default function DocumentUploadModal({
       // 显示结果
       setParseResult(result);
       setShowPreview(true);
+      setHasParseResult(true);
       
       toast.success(`成功解析文档，生成了 ${result.total_points} 个知识点`);
 
     } catch (error) {
       console.error('文档解析失败:', error);
       toast.error('文档解析失败，请重试');
+    } finally {
+      setUploading(false);
+      setTimeout(() => setUploadProgress(0), 1000);
+    }
+  };
+
+  const handleReparse = async () => {
+    if (!file) {
+      toast.error('没有可重新解析的文件');
+      return;
+    }
+
+    try {
+      setUploading(true);
+      setUploadProgress(0);
+      setShowPreview(false);
+
+      // 模拟上传进度
+      const progressInterval = setInterval(() => {
+        setUploadProgress((prev) => {
+          if (prev >= 90) return prev;
+          return prev + Math.random() * 15;
+        });
+      }, 200);
+
+      const result = await parseDocument(file, maxKnowledgePoints, userRequirements);
+      
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+
+      // 显示结果
+      setParseResult(result);
+      setShowPreview(true);
+      
+      toast.success(`重新解析完成，生成了 ${result.total_points} 个知识点`);
+
+    } catch (error) {
+      console.error('重新解析失败:', error);
+      toast.error('重新解析失败，请重试');
     } finally {
       setUploading(false);
       setTimeout(() => setUploadProgress(0), 1000);
@@ -241,11 +284,32 @@ export default function DocumentUploadModal({
                     <Text size="xs" c="dimmed">
                       文件大小: {formatFileSize(file.size)}
                     </Text>
+                    {hasParseResult && parseResult && (
+                      <Text size="xs" c="blue" fw={500}>
+                        已解析：{parseResult.total_points} 个知识点
+                      </Text>
+                    )}
                   </Stack>
-                  <Badge color="green" variant="light">
-                    ✓ 已选择
-                  </Badge>
+                  <Stack gap={4} align="flex-end">
+                    <Badge color="green" variant="light">
+                      ✓ 已选择
+                    </Badge>
+                    {hasParseResult && (
+                      <Badge color="blue" variant="light">
+                        已解析
+                      </Badge>
+                    )}
+                  </Stack>
                 </Group>
+              </Alert>
+            )}
+
+            {/* 重新解析提示 */}
+            {hasParseResult && (
+              <Alert icon={<IconInfoCircle size={16} />} color="blue" variant="light">
+                <Text size="sm">
+                  📝 您可以修改参数或要求，然后点击"重新解析"来获得不同的知识点提取结果
+                </Text>
               </Alert>
             )}
 
@@ -283,14 +347,28 @@ export default function DocumentUploadModal({
                 取消
               </Button>
               
-              <Button
-                leftSection={<IconUpload size={16} />}
-                onClick={handleUpload}
-                disabled={!file || uploading}
-                loading={uploading}
-              >
-                开始解析
-              </Button>
+              <Group gap="sm">
+                {hasParseResult && (
+                  <Button
+                    variant="light"
+                    leftSection={<IconRefresh size={16} />}
+                    onClick={handleReparse}
+                    disabled={!file || uploading}
+                    loading={uploading}
+                  >
+                    重新解析
+                  </Button>
+                )}
+                
+                <Button
+                  leftSection={<IconUpload size={16} />}
+                  onClick={handleUpload}
+                  disabled={!file || uploading}
+                  loading={uploading}
+                >
+                  {hasParseResult ? '解析' : '开始解析'}
+                </Button>
+              </Group>
             </Group>
           </Stack>
         </div>
