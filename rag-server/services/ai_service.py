@@ -129,7 +129,7 @@ class AIService:
             # Parse the response
             logger.debug(f"[{request_id}] Parsing AI response")
             parse_start = time.time()
-            knowledge_points = self._parse_ai_response(response, request_id)
+            knowledge_points = self._parse_ai_response(response, request_id, text)
             parse_time = time.time() - parse_start
             logger.debug(f"[{request_id}] Response parsed in {parse_time:.3f}s")
             
@@ -149,53 +149,52 @@ class AIService:
     def _create_extraction_system_prompt(self) -> str:
         """Create a structured prompt for knowledge point extraction"""
         prompt = f"""
-你是一个数学知识专家，需要从给定的文档中智能提取数学知识点。
+你是一个数学知识专家，需要从给定的文档中智能提取数学知识点的位置信息。
 
-【第一步：文档结构分析】
+你的任务是分析文档内容，识别知识点，并返回每个知识点在原文中的位置信息，而不是返回具体内容。
 
-请结合用户提供的文本和要求，智能提取数学知识点：
+【分析要求】
+1. 识别文档中的主要知识点（概念、定义、公式、方法等）
+2. 识别每个知识点相关的例题和练习
+3. 为每个知识点确定合适的分类和标签
+4. 确定每个内容块在原文中的位置范围
 
-- 将概念、公式、方法、原理等整合到description中
-- 完全保持原文中例题的内容和解题步骤，不做任何修改
-- 如果有课后练习，也作为examples包含
-- 每个知识点应该是完整且独立的概念
-
-【第三步：输出格式】
-按以下JSON格式输出：
+【输出格式】
+返回JSON格式，包含位置信息：
 {{
   "knowledge_points": [
     {{
-      "title": "知识点标题",
-      "description": "完整描述，包含概念、定义、公式、方法、原理、应用场景等。对于完整教学材料，这里应该包含所有相关的理论内容。保持原文的格式、换行、编号、加粗等结构化信息。",
-      "category": "使用以下预定义的英文分类值之一：sequence（数列）、algebra（代数）、geometry（几何）、calculus（微积分）、statistics（概率统计）、linear-algebra（线性代数）、discrete-math（离散数学）、number-theory（数论）、general（通用）",
+      "title": "知识点标题（简短概括）",
+      "category": "预定义分类：sequence|algebra|geometry|calculus|statistics|linear-algebra|discrete-math|number-theory|general",
+      "description_range": {{
+        "start_line": 起始行号（从1开始）,
+        "end_line": 结束行号
+      }},
       "examples": [
         {{
-          "question": "原文中的例题问题（完全保持原文，包括换行、数学公式、格式）",
-          "solution": "原文中的解答过程（完全保持原文格式、步骤、换行、编号、数学公式等，不修改）", 
-          "difficulty": "根据题目复杂度判断：easy|medium|hard"
+          "question_range": {{
+            "start_line": 问题起始行号,
+            "end_line": 问题结束行号
+          }},
+          "solution_range": {{
+            "start_line": 解答起始行号,
+            "end_line": 解答结束行号
+          }},
+          "difficulty": "easy|medium|hard"
         }}
       ],
-      "tags": ["核心标签1", "核心标签2", "核心标签3"]
+      "tags": ["标签1", "标签2", "标签3"]
     }}
   ]
 }}
 
-【重要要求】
-1. 例题内容必须完全来自原文，保持原有的表述、符号、解题步骤不变
-2. 不要修改、简化或重新组织例题的解答过程
-3. description要充分整合原文的所有理论内容
-4. 优先保持内容完整性，避免为了凑数量而拆分
-5. 保持原文的格式和换行信息，包括数学公式、分段、缩进等
-6. 在description和examples中保留原文的结构化信息（如：1. 2. 3.编号、**加粗**、分段等）
-7. 数学公式和符号必须完全按照原文格式保留
-8. category字段必须使用预定义的英文分类值，不要使用中文或其他自定义分类
-
-【JSON格式要求】
-9. 必须输出标准的JSON格式，确保所有字符串正确转义
-10. 数学公式中的反斜杠必须双重转义，例如：\\\\frac、\\\\sqrt、\\\\dots、\\\\times等
-11. 换行符使用\\n表示，制表符使用\\t表示
-12. 所有双引号在字符串内部必须转义为\\"
-13. JSON结构必须完整且语法正确，避免任何解析错误
+【重要说明】
+1. 行号从1开始计数
+2. description_range应该包含该知识点的所有理论内容
+3. examples中的question_range和solution_range要准确对应原文中的例题
+4. 确保位置范围不重叠，每个范围都是完整的内容块
+5. 优先保持内容的完整性，避免过度拆分
+6. 只返回位置信息，不返回具体文本内容
 
 """
         return prompt
@@ -251,18 +250,85 @@ class AIService:
         
         return json_content
     
+    def _extract_content_by_lines(self, text: str, start_line: int, end_line: int) -> str:
+        """Extract content from text by line numbers"""
+        lines = text.split('\n')
+        
+        # Convert to 0-based indexing
+        start_idx = max(0, start_line - 1)
+        end_idx = min(len(lines), end_line)
+        
+        # Extract the specified lines
+        extracted_lines = lines[start_idx:end_idx]
+        return '\n'.join(extracted_lines).strip()
+    
+    def _create_knowledge_points_from_positions(self, text: str, position_data: dict) -> List[KnowledgePointData]:
+        """Create knowledge point objects from position information"""
+        knowledge_points = []
+        
+        for kp_data in position_data.get("knowledge_points", []):
+            # Extract description content
+            desc_range = kp_data.get("description_range", {})
+            description = self._extract_content_by_lines(
+                text, 
+                desc_range.get("start_line", 1),
+                desc_range.get("end_line", 1)
+            )
+            
+            # Extract examples
+            examples = []
+            for ex_data in kp_data.get("examples", []):
+                question_range = ex_data.get("question_range", {})
+                solution_range = ex_data.get("solution_range", {})
+                
+                question = self._extract_content_by_lines(
+                    text,
+                    question_range.get("start_line", 1),
+                    question_range.get("end_line", 1)
+                )
+                
+                solution = self._extract_content_by_lines(
+                    text,
+                    solution_range.get("start_line", 1),
+                    solution_range.get("end_line", 1)
+                )
+                
+                if question and solution:
+                    example = ExampleData(
+                        question=question,
+                        solution=solution,
+                        difficulty=ex_data.get("difficulty", "medium")
+                    )
+                    examples.append(example)
+            
+            # Create knowledge point
+            kp = KnowledgePointData(
+                title=kp_data.get("title", "未命名知识点"),
+                description=description,
+                category=kp_data.get("category", "general"),
+                examples=examples,
+                tags=kp_data.get("tags", [])
+            )
+            knowledge_points.append(kp)
+        
+        return knowledge_points
+    
     async def _call_ai_api(self, prompt: str, text: str, user_requirements: Optional[str] = None, request_id: str = None) -> str:
         """Call AI API to generate content"""
         url = f"{self.api_base}/chat/completions"
 
+        # Add line numbers to the text for position reference
+        lines = text.split('\n')
+        numbered_text = '\n'.join(f"{i+1:3d}: {line}" for i, line in enumerate(lines))
+        
         user_content = f"""
-文档内容：
-{text}
+文档内容（带行号）：
+{numbered_text}
 
 请直接输出JSON：
 """ if not user_requirements else f"""
-文档内容：
-{text}
+文档内容（带行号）：
+{numbered_text}
 
 我的要求：
 {user_requirements}
@@ -284,10 +350,7 @@ class AIService:
             ],
             "max_tokens": 32768,
             "temperature": 0.3,
-            "stream": False,
-            "thinking": {
-                "type": "disabled"
-            }
+            "stream": False
         }
         
         # Log request details (without sensitive content)
@@ -316,7 +379,7 @@ class AIService:
                     result = await response.json()
             
             # Log response details
-            logger.debug(f"[{request_id}] LLM Response: {result}")
+            logger.debug(f"[{request_id}] LLM Response: {json.dumps(result, indent=2)}")
             
             if "choices" not in result or len(result["choices"]) == 0:
                 logger.error(f"[{request_id}] Invalid API response: no choices found")
@@ -349,7 +412,7 @@ class AIService:
             logger.error(f"[{request_id}] Error calling AI API: {e}")
             raise
     
-    def _parse_ai_response(self, response: str, request_id: str) -> List[KnowledgePointData]:
+    def _parse_ai_response(self, response: str, request_id: str, original_text: str) -> List[KnowledgePointData]:
         """Parse AI response and convert to knowledge point objects"""
         logger.debug(f"[{request_id}] Starting response parsing")
         logger.debug(f"[{request_id}] Raw response length: {len(response)} characters")
@@ -370,14 +433,9 @@ class AIService:
             
             json_content = response[start_idx:end_idx]
             logger.debug(f"[{request_id}] Extracted JSON content length: {len(json_content)} characters")
-            logger.debug(f"[{request_id}] JSON content preview: {json_content[:200]}...")
+            logger.debug(f"[{request_id}] JSON content preview: {json_content}...")
             
-            # Fix common LaTeX escape issues in JSON
-            # Replace problematic LaTeX commands that cause JSON parsing errors
-            json_content = self._fix_latex_escapes(json_content)
-            logger.debug(f"[{request_id}] Fixed LaTeX escapes in JSON content")
-            
-            # Parse JSON
+            # Parse JSON (position data should be simple, no LaTeX escapes needed)
             logger.debug(f"[{request_id}] Attempting to parse JSON")
             parsed_data = json.loads(json_content)
             logger.info(f"[{request_id}] Successfully parsed JSON response")
@@ -388,72 +446,15 @@ class AIService:
                 logger.error(f"[{request_id}] Available keys: {list(parsed_data.keys())}")
                 raise ValueError("Invalid response format: missing 'knowledge_points'")
             
-            # Log document type if present
-            document_type = parsed_data.get("document_type", "unknown")
-            logger.info(f"[{request_id}] Document type identified as: {document_type}")
-            
             raw_knowledge_points = parsed_data["knowledge_points"]
-            logger.info(f"[{request_id}] Found {len(raw_knowledge_points)} raw knowledge points to process")
+            logger.info(f"[{request_id}] Found {len(raw_knowledge_points)} knowledge points with position information")
             
-            knowledge_points = []
-            skipped_examples = 0
-            skipped_points = 0
-            
-            for i, kp_data in enumerate(raw_knowledge_points):
-                logger.debug(f"[{request_id}] Processing knowledge point {i+1}/{len(raw_knowledge_points)}")
-                
-                # Validate and create examples
-                examples = []
-                raw_examples = kp_data.get("examples", [])
-                logger.debug(f"[{request_id}] KP {i+1} has {len(raw_examples)} raw examples")
-                
-                for j, ex_data in enumerate(raw_examples):
-                    try:
-                        example = ExampleData(
-                            question=ex_data.get("question", ""),
-                            solution=ex_data.get("solution", ""),
-                            difficulty=ex_data.get("difficulty", "medium")
-                        )
-                        examples.append(example)
-                        logger.debug(f"[{request_id}] KP {i+1} example {j+1} validated successfully")
-                    except Exception as e:
-                        skipped_examples += 1
-                        logger.warning(f"[{request_id}] Skipping invalid example {j+1} in KP {i+1}: {e}")
-                        logger.debug(f"[{request_id}] Invalid example data: {ex_data}")
-                        continue
-                
-                # Create knowledge point
-                try:
-                    title = kp_data.get("title", "未命名知识点")
-                    description = kp_data.get("description", "")
-                    category = kp_data.get("category", "general")
-                    tags = kp_data.get("tags", [])
-                    
-                    logger.debug(f"[{request_id}] KP {i+1} - Title: '{title}', Category: '{category}', Examples: {len(examples)}, Tags: {len(tags)}")
-                    
-                    kp = KnowledgePointData(
-                        title=title,
-                        description=description,
-                        category=category,
-                        examples=examples,
-                        tags=tags
-                    )
-                    knowledge_points.append(kp)
-                    logger.debug(f"[{request_id}] KP {i+1} created successfully")
-                    
-                except Exception as e:
-                    skipped_points += 1
-                    logger.warning(f"[{request_id}] Skipping invalid knowledge point {i+1}: {e}")
-                    logger.debug(f"[{request_id}] Invalid KP data: {kp_data}")
-                    continue
+            # Create knowledge points from position information
+            logger.debug(f"[{request_id}] Creating knowledge points from position data")
+            knowledge_points = self._create_knowledge_points_from_positions(original_text, parsed_data)
             
             logger.info(f"[{request_id}] Response parsing completed successfully")
             logger.info(f"[{request_id}] Successfully created {len(knowledge_points)} knowledge points")
-            
-            if skipped_points > 0:
-                logger.warning(f"[{request_id}] Skipped {skipped_points} invalid knowledge points")
-            if skipped_examples > 0:
-                logger.warning(f"[{request_id}] Skipped {skipped_examples} invalid examples")
             
             # Log summary statistics
             total_examples = sum(len(kp.examples) for kp in knowledge_points)
