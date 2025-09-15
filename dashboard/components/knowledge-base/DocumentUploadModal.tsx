@@ -170,7 +170,7 @@ export default function DocumentUploadModal({
             <Text fw={600}>上传文档</Text>
           </Group>
         }
-        size="md"
+        size="xl"
       >
         <div style={{ position: 'relative' }}>
           <LoadingOverlay visible={uploading} />

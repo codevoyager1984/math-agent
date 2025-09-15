@@ -115,14 +115,14 @@ class AIService:
             # Prepare the prompt for knowledge point extraction
             logger.debug(f"[{request_id}] Creating extraction prompt")
             prompt_start = time.time()
-            prompt = self._create_extraction_prompt(text, max_points, user_requirements)
+            prompt = self._create_extraction_system_prompt()
             prompt_time = time.time() - prompt_start
             logger.debug(f"[{request_id}] Prompt created in {prompt_time:.3f}s (length: {len(prompt)} chars)")
             
             # Call AI API
             logger.info(f"[{request_id}] Calling AI API")
             api_start = time.time()
-            response = await self._call_ai_api(prompt, request_id)
+            response = await self._call_ai_api(prompt, text, user_requirements, request_id)
             api_time = time.time() - api_start
             logger.info(f"[{request_id}] AI API call completed in {api_time:.3f}s")
             
@@ -146,41 +146,21 @@ class AIService:
             logger.error(f"[{request_id}] Exception type: {type(e).__name__}")
             raise
     
-    def _create_extraction_prompt(self, text: str, max_points: int, user_requirements: Optional[str] = None) -> str:
+    def _create_extraction_system_prompt(self) -> str:
         """Create a structured prompt for knowledge point extraction"""
         prompt = f"""
 你是一个数学知识专家，需要从给定的文档中智能提取数学知识点。
 
 【第一步：文档结构分析】
-请首先分析文档结构，判断文档类型：
 
-类型A - 完整教学材料：
-- 有统一主题和明确标题
-- 包含教学结构（如：原则阐述、方法介绍、例题分析、练习等）
-- 内容围绕单一核心知识点展开
-- 示例：《数列求通项公式法》、《二次函数性质》等
+请结合用户提供的文本和要求，智能提取数学知识点：
 
-类型B - 混合内容文档：
-- 包含多个不相关的数学主题
-- 各部分内容相对独立
-- 没有统一的教学结构
-
-【第二步：知识点提取策略】
-
-如果是类型A（完整教学材料）：
-- 提取1个核心知识点
 - 将概念、公式、方法、原理等整合到description中
 - 完全保持原文中例题的内容和解题步骤，不做任何修改
 - 如果有课后练习，也作为examples包含
-
-如果是类型B（混合内容文档）：
-- 根据内容提取多个独立知识点（不超过{max_points}个）
 - 每个知识点应该是完整且独立的概念
 
-【第三步：用户特殊要求】
-{self._format_user_requirements(user_requirements)}
-
-【第四步：输出格式】
+【第三步：输出格式】
 按以下JSON格式输出：
 {{
   "document_type": "complete_tutorial|mixed_content",
@@ -202,27 +182,22 @@ class AIService:
 }}
 
 【重要要求】
-1. 对于完整教学材料，绝不过度拆分，提取1个核心知识点即可
-2. 例题内容必须完全来自原文，保持原有的表述、符号、解题步骤不变
-3. 不要修改、简化或重新组织例题的解答过程
-4. description要充分整合原文的所有理论内容
-5. 优先保持内容完整性，避免为了凑数量而拆分
-6. 保持原文的格式和换行信息，包括数学公式、分段、缩进等
-7. 在description和examples中保留原文的结构化信息（如：1. 2. 3.编号、**加粗**、分段等）
-8. 数学公式和符号必须完全按照原文格式保留
-9. category字段必须使用预定义的英文分类值，不要使用中文或其他自定义分类
+1. 例题内容必须完全来自原文，保持原有的表述、符号、解题步骤不变
+2. 不要修改、简化或重新组织例题的解答过程
+3. description要充分整合原文的所有理论内容
+4. 优先保持内容完整性，避免为了凑数量而拆分
+5. 保持原文的格式和换行信息，包括数学公式、分段、缩进等
+6. 在description和examples中保留原文的结构化信息（如：1. 2. 3.编号、**加粗**、分段等）
+7. 数学公式和符号必须完全按照原文格式保留
+8. category字段必须使用预定义的英文分类值，不要使用中文或其他自定义分类
 
 【JSON格式要求】
-10. 必须输出标准的JSON格式，确保所有字符串正确转义
-11. 数学公式中的反斜杠必须双重转义，例如：\\\\frac、\\\\sqrt、\\\\dots、\\\\times等
-12. 换行符使用\\n表示，制表符使用\\t表示
-13. 所有双引号在字符串内部必须转义为\\"
-14. JSON结构必须完整且语法正确，避免任何解析错误
+9. 必须输出标准的JSON格式，确保所有字符串正确转义
+10. 数学公式中的反斜杠必须双重转义，例如：\\\\frac、\\\\sqrt、\\\\dots、\\\\times等
+11. 换行符使用\\n表示，制表符使用\\t表示
+12. 所有双引号在字符串内部必须转义为\\"
+13. JSON结构必须完整且语法正确，避免任何解析错误
 
-文档内容：
-{text}
-
-请直接输出JSON：
 """
         return prompt
     
@@ -241,102 +216,74 @@ class AIService:
         """Fix common LaTeX escape sequences that cause JSON parsing errors"""
         import re
         
-        # Common LaTeX commands that cause JSON escape issues
-        latex_fixes = [
-            # Fix \dots, \ldots, \cdots etc.
-            (r'\\dots', r'\\\\dots'),
-            (r'\\ldots', r'\\\\ldots'),
-            (r'\\cdots', r'\\\\cdots'),
-            (r'\\vdots', r'\\\\vdots'),
-            (r'\\ddots', r'\\\\ddots'),
+        # 更彻底的方法：直接在字符串值内修复所有单反斜杠
+        def fix_string_escapes(match):
+            """修复JSON字符串值内的所有转义问题"""
+            full_match = match.group(0)
+            # 提取引号内的内容
+            string_content = full_match[1:-1]  # 去掉前后的引号
             
-            # Fix common math symbols
-            (r'\\times', r'\\\\times'),
-            (r'\\div', r'\\\\div'),
-            (r'\\pm', r'\\\\pm'),
-            (r'\\mp', r'\\\\mp'),
+            # 1. 先修复已经被意外双重转义的情况
+            # 例如：\\\\frac -> \\frac (避免过度转义)
+            string_content = re.sub(r'\\\\\\\\', r'\\\\', string_content)
             
-            # Fix Greek letters
-            (r'\\alpha', r'\\\\alpha'),
-            (r'\\beta', r'\\\\beta'),
-            (r'\\gamma', r'\\\\gamma'),
-            (r'\\delta', r'\\\\delta'),
-            (r'\\epsilon', r'\\\\epsilon'),
-            (r'\\theta', r'\\\\theta'),
-            (r'\\lambda', r'\\\\lambda'),
-            (r'\\mu', r'\\\\mu'),
-            (r'\\pi', r'\\\\pi'),
-            (r'\\sigma', r'\\\\sigma'),
-            (r'\\phi', r'\\\\phi'),
-            (r'\\omega', r'\\\\omega'),
+            # 2. 修复所有单反斜杠后跟字母或特殊字符的情况
+            # 这会捕获所有LaTeX命令，包括我们之前遗漏的
+            string_content = re.sub(r'(?<!\\)\\(?=[a-zA-Z()[\]{}])', r'\\\\', string_content)
             
-            # Fix common functions
-            (r'\\sin', r'\\\\sin'),
-            (r'\\cos', r'\\\\cos'),
-            (r'\\tan', r'\\\\tan'),
-            (r'\\log', r'\\\\log'),
-            (r'\\ln', r'\\\\ln'),
-            (r'\\exp', r'\\\\exp'),
+            # 3. 修复其他特殊的转义字符
+            replacements = {
+                '\\n': '\\\\n',   # 换行符
+                '\\t': '\\\\t',   # 制表符  
+                '\\r': '\\\\r',   # 回车符
+                '\\"': '\\\\"',   # 双引号
+            }
             
-            # Fix fractions and roots
-            (r'\\frac', r'\\\\frac'),
-            (r'\\sqrt', r'\\\\sqrt'),
+            for old, new in replacements.items():
+                # 只替换不是已经正确转义的情况
+                string_content = re.sub(f'(?<!\\\\){re.escape(old)}', new, string_content)
             
-            # Fix set notation
-            (r'\\in', r'\\\\in'),
-            (r'\\notin', r'\\\\notin'),
-            (r'\\subset', r'\\\\subset'),
-            (r'\\supset', r'\\\\supset'),
-            
-            # Fix inequalities
-            (r'\\leq', r'\\\\leq'),
-            (r'\\geq', r'\\\\geq'),
-            (r'\\neq', r'\\\\neq'),
-            
-            # Fix arrows
-            (r'\\to', r'\\\\to'),
-            (r'\\rightarrow', r'\\\\rightarrow'),
-            (r'\\leftarrow', r'\\\\leftarrow'),
-            
-            # Fix other common symbols
-            (r'\\infty', r'\\\\infty'),
-            (r'\\sum', r'\\\\sum'),
-            (r'\\prod', r'\\\\prod'),
-            (r'\\int', r'\\\\int'),
-            (r'\\lim', r'\\\\lim'),
-            
-            # Fix text commands
-            (r'\\text', r'\\\\text'),
-            (r'\\mathrm', r'\\\\mathrm'),
-            (r'\\mathbf', r'\\\\mathbf'),
-            (r'\\mathit', r'\\\\mathit'),
-        ]
+            # 重新添加引号
+            return f'"{string_content}"'
         
-        # Apply all fixes
-        for pattern, replacement in latex_fixes:
-            # Only fix if it's within a string value (between quotes)
-            # This prevents fixing LaTeX in JSON keys
-            json_content = re.sub(
-                r'("(?:[^"\\]|\\.)*?)' + pattern + r'((?:[^"\\]|\\.)*?")',
-                r'\1' + replacement + r'\2',
-                json_content
-            )
+        # 只对JSON字符串值（在双引号内的内容）进行修复
+        # 这个正则表达式匹配完整的字符串值，包括转义的引号
+        json_content = re.sub(r'"(?:[^"\\]|\\.)*"', fix_string_escapes, json_content)
         
         return json_content
     
-    async def _call_ai_api(self, prompt: str, request_id: str) -> str:
+    async def _call_ai_api(self, prompt: str, text: str, user_requirements: Optional[str] = None, request_id: str = None) -> str:
         """Call AI API to generate content"""
         url = f"{self.api_base}/chat/completions"
+
+        user_content = f"""
+文档内容：
+{text}
+
+请直接输出JSON：
+""" if not user_requirements else f"""
+文档内容：
+{text}
+
+我的要求：
+{user_requirements}
+
+请直接输出JSON：
+"""
         
         payload = {
             "model": self.model,
             "messages": [
                 {
-                    "role": "user",
+                    "role": "system",
                     "content": prompt
+                },
+                {
+                    "role": "user",
+                    "content": user_content
                 }
             ],
-            "max_tokens": 8192,
+            "max_tokens": 32768,
             "temperature": 0.3,
             "stream": False
         }
