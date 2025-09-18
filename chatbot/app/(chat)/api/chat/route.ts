@@ -345,7 +345,21 @@ export async function POST(request: Request) {
             let reasoningFinished = false;
 
             try {
-              // Stage 1: Deep thinking with reasoning model (no tools)
+              // Send reasoning-start event
+              const reasoningId = generateUUID();
+              dataStream.merge(
+                createUIMessageStream({
+                  execute: async ({ writer }) => {
+                    writer.write({
+                      type: 'reasoning-start',
+                      id: reasoningId,
+                    });
+                  },
+                  generateId: generateUUID,
+                })
+              );
+
+              // Stage 1: Get reasoning without streaming to UI
               console.log(`[${requestId}] Stage 1: Deep thinking with reasoner model`);
               const reasoningResult = streamText({
                 model: myProvider.languageModel('chat-model-reasoning'),
@@ -367,60 +381,62 @@ ${existingKnowledgePoints.join(', ')}
                   isEnabled: isProductionEnvironment,
                   functionId: 'reasoning-stage',
                 },
-                onFinish: (reasoningResponse) => {
-                  // reasoningFinished = true;
-                  // reasoningText = reasoningResponse.text;
-                  // console.log(`[${requestId}] Stage 1 completed, reasoning length: ${reasoningText.length}`);
-                },
-                onStepFinish: (stepResponse) => {
-                  // reasoningText = stepResponse.text;
-                  // console.log("==================")
-                  // console.log(stepResponse);
-                  // console.log("==================")
-                  // console.log(`[${requestId}] Stage 1 completed, reasoning length: ${reasoningText.length}`);
-                },
                 onChunk: (chunk) => {
-                  console.log("==================")
-                  console.log(chunk);
-                  console.log("==================")
+                  if (reasoningFinished) return; // 避免重复处理
+                  
                   const chunkType = chunk.chunk.type;
                   if (chunkType === 'reasoning-delta') {
                     const reasoningDelta = chunk?.chunk?.text;
                     if (reasoningDelta) {
                       reasoningText += reasoningDelta;
+                      // 实时流式发送推理内容到前端
+                      dataStream.merge(
+                        createUIMessageStream({
+                          execute: async ({ writer }) => {
+                            writer.write({
+                              type: 'reasoning-delta',
+                              id: reasoningId,
+                              delta: reasoningDelta,
+                            });
+                          },
+                          generateId: generateUUID,
+                        })
+                      );
                     }
                   }
                   if (chunkType === 'text-delta') {
                     reasoningFinished = true;
+                    console.log(`[${requestId}] Stage 1 reasoning completed, total length: ${reasoningText.length}`);
                   }
                 },
               });
 
-              // Get the complete reasoning text with timeout
-              // const timeout = setTimeout(() => {
-              //   console.warn(`[${requestId}] Stage 1 reasoning timeout, falling back to single-stage`);
-              //   shouldFallback = true;
-              // }, 30000); // 30 second timeout
+              // Consume the reasoning stream to trigger onChunk callbacks
+              console.log(`[${requestId}] Consuming reasoning stream`);
+              reasoningResult.consumeStream();
 
-              dataStream.merge(
-                reasoningResult.toUIMessageStream({
-                  sendReasoning: true,
-                }),
-              );
-
+              // Wait for reasoning to complete with timeout
               while (!reasoningFinished) {
                 console.log(`[${requestId}] Waiting for reasoning to finish`);
                 await new Promise(resolve => setTimeout(resolve, 100));
               }
-              // clearTimeout(timeout);
 
-              // if (shouldFallback || !reasoningText.trim()) {
-              //   throw new Error('Reasoning stage failed or timed out');
-              // }
+              // Send reasoning-end event
+              dataStream.merge(
+                createUIMessageStream({
+                  execute: async ({ writer }) => {
+                    writer.write({
+                      type: 'reasoning-end',
+                      id: reasoningId,
+                    });
+                  },
+                  generateId: generateUUID,
+                })
+              );
 
-              // console.log(`[${requestId}] Stage 1 completed, reasoning length: ${reasoningText.length}`);
+              console.log(`[${requestId}] Stage 1 completed, reasoning length: ${reasoningText.length}`);
 
-              // Stage 2: Execute with tools based on reasoning
+              // Stage 2: Execute with tools and stream everything (reasoning + response)
               console.log(`[${requestId}] Stage 2: Executing with tools based on reasoning`);
               const enhancedSystemPrompt = systemPrompt({
                 selectedChatModel: 'chat-model', // Use regular chat model for stage 2
@@ -428,8 +444,6 @@ ${existingKnowledgePoints.join(', ')}
                 existingKnowledgePoints,
                 reasoningContext: reasoningText // Pass reasoning as context
               });
-
-              console.log(`[${requestId}] Enhanced system prompt:`, enhancedSystemPrompt);
 
               const result = streamText({
                 model: myProvider.languageModel('chat-model'),
@@ -448,24 +462,21 @@ ${existingKnowledgePoints.join(', ')}
                   isEnabled: isProductionEnvironment,
                   functionId: 'action-stage',
                 },
+                onChunk: (chunk) => {
+                  console.log(`[${requestId}] Stage 2 Chunk received:`, chunk);
+                },
               });
 
               console.log(`[${requestId}] Two-stage StreamText result created, consuming stream`);
               result.consumeStream();
 
-              console.log(`[${requestId}] Merging two-stage result stream with data stream`);
+              console.log(`[${requestId}] Streaming response (reasoning already streamed)`);
 
-              // First, send the reasoning content as a data stream
-              dataStream.write({
-                type: 'data-reasoning',
-                data: reasoningText,
-              });
-
-              // Then merge the main response stream
+              // Merge the main response stream (reasoning was already streamed incrementally)
               dataStream.merge(
                 result.toUIMessageStream({
-                  sendReasoning: true,
-                }),
+                  sendReasoning: false,
+                })
               );
 
             } catch (error) {
