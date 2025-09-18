@@ -79,8 +79,8 @@ function PureMessages({
               return true;
             })
             .map((message, index) => {
-              console.log("index", index);
-              console.log("message", message);
+              // console.log("index", index);
+              // console.log("message", message);
               return (
                 <PreviewMessage
                   key={message.id}

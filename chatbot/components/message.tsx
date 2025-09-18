@@ -115,10 +115,13 @@ const PurePreviewMessage = ({
               const key = `message-${message.id}-part-${index}`;
 
               if (type === 'reasoning' && part.text?.trim().length > 0) {
+                // 检查推理部分是否已完成
+                const reasoningIsLoading = isLoading && (part as any).state !== 'done';
+                
                 return (
                   <MessageReasoning
                     key={key}
-                    isLoading={isLoading}
+                    isLoading={reasoningIsLoading}
                     reasoning={part.text}
                   />
                 );

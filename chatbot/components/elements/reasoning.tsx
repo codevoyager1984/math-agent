@@ -116,6 +116,7 @@ export const ReasoningTrigger = memo(
   ({ className, children, ...props }: ReasoningTriggerProps) => {
     const { isStreaming, isOpen, duration } = useReasoning();
 
+
     return (
       <CollapsibleTrigger
         className={cn(
