@@ -346,7 +346,7 @@ export async function POST(request: Request) {
             }),
             messages: modelMessages,
             stopWhen: stepCountIs(5),
-            experimental_activeTools: ['searchKnowledgePoints'],
+            experimental_activeTools: selectedChatModel === 'chat-model-reasoning' ? [] : ['searchKnowledgePoints'],
             // experimental_activeTools:
             //   selectedChatModel === 'chat-model-reasoning'
             //     ? []
