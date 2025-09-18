@@ -18,7 +18,7 @@ import {
   saveMessages,
 } from '@/lib/db/queries';
 import { convertToUIMessages, generateUUID } from '@/lib/utils';
-import type { UIMessage, UIMessagePart } from 'ai';
+import type { ModelMessage, ToolCallPart, UIMessage, UIMessagePart } from 'ai';
 import { generateTitleFromUserMessage } from '../../actions';
 import { createDocument } from '@/lib/ai/tools/create-document';
 import { updateDocument } from '@/lib/ai/tools/update-document';
@@ -361,6 +361,21 @@ export async function POST(request: Request) {
 
               // Stage 1: Get reasoning without streaming to UI
               console.log(`[${requestId}] Stage 1: Deep thinking with reasoner model`);
+              const reasoningMessages = modelMessages.filter(x => x.role !== 'tool').map(x => {
+                if (x.role !== 'assistant') {
+                  return x;
+                }
+                const {role, content} = x;
+                const filteredContent = [];
+                for (const part of content) {
+                  if ((part as ToolCallPart).type === 'tool-call') {
+                  } else {
+                    filteredContent.push(part);
+                  }
+                }
+                return {role, content: filteredContent};
+              })
+              console.log(`[${requestId}] Stage 1: Model messages:`, JSON.stringify(reasoningMessages, null, 2));
               const reasoningResult = streamText({
                 model: myProvider.languageModel('chat-model-reasoning'),
                 system: `你是一个专业的数学问题分析专家。请仔细分析用户的问题，制定详细的解决方案。
@@ -376,7 +391,7 @@ export async function POST(request: Request) {
 ${existingKnowledgePoints.join(', ')}
 
 请详细思考如何最好地解答用户的问题。`,
-                messages: modelMessages,
+                messages: reasoningMessages as ModelMessage[],
                 experimental_telemetry: {
                   isEnabled: isProductionEnvironment,
                   functionId: 'reasoning-stage',
@@ -409,6 +424,10 @@ ${existingKnowledgePoints.join(', ')}
                     console.log(`[${requestId}] Stage 1 reasoning completed, total length: ${reasoningText.length}`);
                   }
                 },
+                onError: (error) => {
+                  console.error(`[${requestId}] Stage 1 reasoning error:`, error);
+                  reasoningFinished = true;
+                }
               });
 
               // Consume the reasoning stream to trigger onChunk callbacks
@@ -444,6 +463,8 @@ ${existingKnowledgePoints.join(', ')}
                 existingKnowledgePoints,
                 reasoningContext: reasoningText // Pass reasoning as context
               });
+
+              console.log(`[${requestId}] Enhanced system prompt:`, enhancedSystemPrompt);
 
               const result = streamText({
                 model: myProvider.languageModel('chat-model'),
