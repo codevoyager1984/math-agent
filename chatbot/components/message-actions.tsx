@@ -53,7 +53,7 @@ export function PureMessageActions({
         </Action>
 
         <Action
-          tooltip="Upvote Response"
+          tooltip={t('chat.upvoteResponse')}
           data-testid="message-upvote"
           disabled={vote?.isUpvoted}
               onClick={async () => {
@@ -67,7 +67,7 @@ export function PureMessageActions({
                 });
 
                 toast.promise(upvote, {
-                  loading: 'Upvoting Response...',
+                  loading: t('chat.upvotingResponse'),
                   success: () => {
                     mutate<Array<Vote>>(
                       `/api/vote?chatId=${chatId}`,
@@ -100,7 +100,7 @@ export function PureMessageActions({
         </Action>
 
         <Action
-          tooltip="Downvote Response"
+          tooltip={t('chat.downvoteResponse')}
           data-testid="message-downvote"
           disabled={vote && !vote.isUpvoted}
               onClick={async () => {
@@ -114,7 +114,7 @@ export function PureMessageActions({
                 });
 
                 toast.promise(downvote, {
-                  loading: 'Downvoting Response...',
+                  loading: t('chat.downvotingResponse'),
                   success: () => {
                     mutate<Array<Vote>>(
                       `/api/vote?chatId=${chatId}`,

@@ -71,7 +71,11 @@
     "waitForModelResponse": "Please wait for the model to finish its response!",
     "waitForOcrCompletion": "Please wait for image text recognition to complete before sending message",
     "sendMessagePlaceholder": "Send a message...",
-    "ocrInProgressPlaceholder": "Image text recognition in progress, you can send message after completion..."
+    "ocrInProgressPlaceholder": "Image text recognition in progress, you can send message after completion...",
+    "upvoteResponse": "Upvote Response",
+    "downvoteResponse": "Downvote Response",
+    "upvotingResponse": "Upvoting Response...",
+    "downvotingResponse": "Downvoting Response..."
   },
   "theme": {
     "toggleDarkMode": "Toggle dark mode",

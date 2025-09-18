@@ -71,7 +71,11 @@
     "waitForModelResponse": "请等待模型完成回复！",
     "waitForOcrCompletion": "请等待图片文字识别完成后再发送消息",
     "sendMessagePlaceholder": "发送消息...",
-    "ocrInProgressPlaceholder": "正在识别图片文字，完成后可发送消息..."
+    "ocrInProgressPlaceholder": "正在识别图片文字，完成后可发送消息...",
+    "upvoteResponse": "点赞回复",
+    "downvoteResponse": "点踩回复",
+    "upvotingResponse": "正在点赞回复...",
+    "downvotingResponse": "正在点踩回复..."
   },
   "theme": {
     "toggleDarkMode": "切换到深色模式",
