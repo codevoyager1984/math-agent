@@ -56,7 +56,7 @@ export async function POST(request: Request) {
     }
 
     // Get API key from environment variables
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = process.env.DOUBAO_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ error: 'OpenRouter API key not configured' }, { status: 500 });
     }
@@ -68,33 +68,35 @@ export async function POST(request: Request) {
 
     // Prepare the request to OpenRouter API with base64 encoded image
     const ocrPayload = {
-      model: "openai/gpt-5",
+      model: "doubao-seed-1-6-vision-250815",
       messages: [
         {
           role: "user",
           content: [
             {
-              type: "text",
-              text: "请识别下图片里面的主体内容，请直接返回完整的内容，不需要做过多解释。"
-            },
-            {
               type: "image_url",
               image_url: {
-                url: `data:${mimeType};base64,${base64}`,
-                detail: "high"
+                url: imageUrl,
               }
-            }
+            },
+            {
+              type: "text",
+              text: "请识别下图片里面的主体内容，请直接返回完整的内容，不需要做过多解释。有换行的地方注意需要换行。"
+            },
           ]
         }
       ],
       max_tokens: 2000,
-      temperature: 0.1
+      temperature: 0.1,
+      thinking: {
+        type: "disabled"
+      }
     };
 
     console.log(`🚀 正在使用 GPT-5 识别图片文字...`);
     console.log('⏳ 请稍等...');
     
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -113,6 +115,8 @@ export async function POST(request: Request) {
     }
 
     const result = await response.json();
+
+    console.log(`🔴 API response: ${JSON.stringify(result.choices[0].message)}`);
 
     if (result.choices && result.choices.length > 0) {
       const content = result.choices[0].message.content;
