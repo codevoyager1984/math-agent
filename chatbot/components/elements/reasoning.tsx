@@ -119,22 +119,23 @@ export const ReasoningTrigger = memo(
     return (
       <CollapsibleTrigger
         className={cn(
-          'flex items-center gap-2 text-muted-foreground text-sm',
+          'flex items-center gap-2 text-muted-foreground/80 text-xs hover:text-muted-foreground transition-colors',
+          'py-1 px-2 rounded-md hover:bg-muted/50',
           className,
         )}
         {...props}
       >
         {children ?? (
           <>
-            <BrainIcon className="size-4" />
+            <BrainIcon className="size-3.5" />
             {isStreaming || duration === 0 ? (
-              <p>Thinking...</p>
+              <span>Thinking...</span>
             ) : (
-              <p>Thought for {duration} seconds</p>
+              <span>Thought for {duration}s</span>
             )}
             <ChevronDownIcon
               className={cn(
-                'size-4 text-muted-foreground transition-transform',
+                'size-3.5 text-muted-foreground/60 transition-transform',
                 isOpen ? 'rotate-180' : 'rotate-0',
               )}
             />
@@ -155,13 +156,14 @@ export const ReasoningContent = memo(
   ({ className, children, ...props }: ReasoningContentProps) => (
     <CollapsibleContent
       className={cn(
-        'mt-4 text-sm',
-        'data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in',
+        'mt-3 text-xs leading-relaxed',
+        'data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-muted-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in',
+        'bg-muted/30 rounded-md p-3 border-l-2 border-muted-foreground/20',
         className,
       )}
       {...props}
     >
-      <Response className="grid gap-2">{children}</Response>
+      <Response className="grid gap-1.5 pl-2 space-y-1.5">{children}</Response>
     </CollapsibleContent>
   ),
 );

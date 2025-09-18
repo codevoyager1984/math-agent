@@ -79,10 +79,12 @@ export const systemPrompt = ({
   selectedChatModel,
   requestHints,
   existingKnowledgePoints = [],
+  reasoningContext,
 }: {
   selectedChatModel: string;
   requestHints: RequestHints;
   existingKnowledgePoints?: string[];
+  reasoningContext?: string;
 }) => {
   const requestPrompt = getRequestPromptFromHints(requestHints);
 
@@ -93,7 +95,13 @@ export const systemPrompt = ({
     knowledgePointsPrompt = `\n\n**现有知识点库 (${existingKnowledgePoints.length}个):**\n${limitedNames.join(', ')}${existingKnowledgePoints.length > 50 ? '...' : ''}\n\n**重要提示**: 当用户询问数学问题时，如果问题与上述现有知识点相关，在使用 searchKnowledgePoints 工具时，请在查询中包含或参考相关的现有知识点名称，以提高搜索的准确性和相关性。优先使用已有的专业术语和知识点名称。`;
   }
 
-  const basePrompt = `${regularPrompt}${knowledgePointsPrompt}\n\n${requestPrompt}`;
+  // Add reasoning context if available (for stage 2 of two-stage reasoning)
+  let reasoningPrompt = '';
+  if (reasoningContext) {
+    reasoningPrompt = `\n\n**深度分析基础 (来自推理阶段):**\n${reasoningContext}\n\n**执行指令**: 基于上述深度分析，现在请执行具体的操作来回答用户的问题。请充分利用分析中的见解和建议，如果分析建议搜索知识点，请使用 searchKnowledgePoints 工具。提供完整、准确、结构化的回答。`;
+  }
+
+  const basePrompt = `${regularPrompt}${knowledgePointsPrompt}${reasoningPrompt}\n\n${requestPrompt}`;
 
   if (selectedChatModel === 'chat-model-reasoning') {
     return basePrompt;

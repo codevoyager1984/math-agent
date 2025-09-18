@@ -325,66 +325,230 @@ export async function POST(request: Request) {
 
     console.log(`[${requestId}] Creating UI message stream with model: ${selectedChatModel}`);
     const stream = createUIMessageStream({
-      execute: ({ writer: dataStream }) => {
+      execute: async ({ writer: dataStream }) => {
         console.log(`[${requestId}] Starting text streaming execution`);
-        
+
         try {
           const modelMessages = convertToModelMessages(filteredMessages);
           console.log(`[${requestId}] Converted to model messages:`, {
             messageCount: modelMessages.length,
             model: selectedChatModel,
-            activeTools: ['searchKnowledgePoints'],
+            activeTools: selectedChatModel === 'chat-model-reasoning' ? [] : ['searchKnowledgePoints'],
             telemetryEnabled: isProductionEnvironment
           });
-          
-          const result = streamText({
-            model: myProvider.languageModel(selectedChatModel!),
-            system: systemPrompt({
-              selectedChatModel: selectedChatModel!,
-              requestHints,
-              existingKnowledgePoints
-            }),
-            messages: modelMessages,
-            stopWhen: stepCountIs(5),
-            experimental_activeTools: selectedChatModel === 'chat-model-reasoning' ? [] : ['searchKnowledgePoints'],
-            // experimental_activeTools:
-            //   selectedChatModel === 'chat-model-reasoning'
-            //     ? []
-            //     : [
-            //         'getWeather',
-            //         'createDocument',
-            //         'updateDocument',
-            //         'requestSuggestions',
-            //       ],
-            experimental_transform: smoothStream({ chunking: 'word' }),
-            tools: {
-              // getWeather,
-              // createDocument: createDocument({ session: session!, dataStream }),
-              // updateDocument: updateDocument({ session: session!, dataStream }),
-              // requestSuggestions: requestSuggestions({
-              //   session: session!,
-              //   dataStream,
-              // }),
-              searchKnowledgePoints: searchKnowledgePoints({
-                session: session!,
-                dataStream,
+
+          // Two-stage processing for reasoning model
+          if (selectedChatModel === 'chat-model-reasoning') {
+            console.log(`[${requestId}] Starting two-stage reasoning process`);
+
+            let reasoningText = '';
+            let reasoningFinished = false;
+
+            try {
+              // Stage 1: Deep thinking with reasoning model (no tools)
+              console.log(`[${requestId}] Stage 1: Deep thinking with reasoner model`);
+              const reasoningResult = streamText({
+                model: myProvider.languageModel('chat-model-reasoning'),
+                system: `你是一个专业的数学问题分析专家。请仔细分析用户的问题，制定详细的解决方案。
+
+分析时请考虑：
+1. 问题的核心要求和难点
+2. 需要的数学知识点和公式
+3. 解题的步骤和方法
+4. 是否需要搜索额外的知识点来辅助解答
+5. 最佳的回答策略和结构
+
+现有的知识库包含以下知识点：
+${existingKnowledgePoints.join(', ')}
+
+请详细思考如何最好地解答用户的问题。`,
+                messages: modelMessages,
+                experimental_telemetry: {
+                  isEnabled: isProductionEnvironment,
+                  functionId: 'reasoning-stage',
+                },
+                onFinish: (reasoningResponse) => {
+                  // reasoningFinished = true;
+                  // reasoningText = reasoningResponse.text;
+                  // console.log(`[${requestId}] Stage 1 completed, reasoning length: ${reasoningText.length}`);
+                },
+                onStepFinish: (stepResponse) => {
+                  // reasoningText = stepResponse.text;
+                  // console.log("==================")
+                  // console.log(stepResponse);
+                  // console.log("==================")
+                  // console.log(`[${requestId}] Stage 1 completed, reasoning length: ${reasoningText.length}`);
+                },
+                onChunk: (chunk) => {
+                  console.log("==================")
+                  console.log(chunk);
+                  console.log("==================")
+                  const chunkType = chunk.chunk.type;
+                  if (chunkType === 'reasoning-delta') {
+                    const reasoningDelta = chunk?.chunk?.text;
+                    if (reasoningDelta) {
+                      reasoningText += reasoningDelta;
+                    }
+                  }
+                  if (chunkType === 'text-delta') {
+                    reasoningFinished = true;
+                  }
+                },
+              });
+
+              // Get the complete reasoning text with timeout
+              // const timeout = setTimeout(() => {
+              //   console.warn(`[${requestId}] Stage 1 reasoning timeout, falling back to single-stage`);
+              //   shouldFallback = true;
+              // }, 30000); // 30 second timeout
+
+              dataStream.merge(
+                reasoningResult.toUIMessageStream({
+                  sendReasoning: true,
+                }),
+              );
+
+              while (!reasoningFinished) {
+                console.log(`[${requestId}] Waiting for reasoning to finish`);
+                await new Promise(resolve => setTimeout(resolve, 100));
+              }
+              // clearTimeout(timeout);
+
+              // if (shouldFallback || !reasoningText.trim()) {
+              //   throw new Error('Reasoning stage failed or timed out');
+              // }
+
+              // console.log(`[${requestId}] Stage 1 completed, reasoning length: ${reasoningText.length}`);
+
+              // Stage 2: Execute with tools based on reasoning
+              console.log(`[${requestId}] Stage 2: Executing with tools based on reasoning`);
+              const enhancedSystemPrompt = systemPrompt({
+                selectedChatModel: 'chat-model', // Use regular chat model for stage 2
+                requestHints,
+                existingKnowledgePoints,
+                reasoningContext: reasoningText // Pass reasoning as context
+              });
+
+              console.log(`[${requestId}] Enhanced system prompt:`, enhancedSystemPrompt);
+
+              const result = streamText({
+                model: myProvider.languageModel('chat-model'),
+                system: enhancedSystemPrompt,
+                messages: modelMessages,
+                stopWhen: stepCountIs(5),
+                experimental_activeTools: ['searchKnowledgePoints'],
+                experimental_transform: smoothStream({ chunking: 'word' }),
+                tools: {
+                  searchKnowledgePoints: searchKnowledgePoints({
+                    session: session!,
+                    dataStream,
+                  }),
+                },
+                experimental_telemetry: {
+                  isEnabled: isProductionEnvironment,
+                  functionId: 'action-stage',
+                },
+              });
+
+              console.log(`[${requestId}] Two-stage StreamText result created, consuming stream`);
+              result.consumeStream();
+
+              console.log(`[${requestId}] Merging two-stage result stream with data stream`);
+
+              // First, send the reasoning content as a data stream
+              dataStream.write({
+                type: 'data-reasoning',
+                data: reasoningText,
+              });
+
+              // Then merge the main response stream
+              dataStream.merge(
+                result.toUIMessageStream({
+                  sendReasoning: true,
+                }),
+              );
+
+            } catch (error) {
+              console.error(`[${requestId}] Two-stage reasoning failed, falling back to single-stage:`, {
+                error: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+                reasoningLength: reasoningText.length
+              });
+
+              // Fallback to single-stage processing with regular chat model
+              console.log(`[${requestId}] Fallback: Using single-stage chat-model processing`);
+
+              const result = streamText({
+                model: myProvider.languageModel('chat-model'),
+                system: systemPrompt({
+                  selectedChatModel: 'chat-model',
+                  requestHints,
+                  existingKnowledgePoints
+                }),
+                messages: modelMessages,
+                stopWhen: stepCountIs(5),
+                experimental_activeTools: ['searchKnowledgePoints'],
+                experimental_transform: smoothStream({ chunking: 'word' }),
+                tools: {
+                  searchKnowledgePoints: searchKnowledgePoints({
+                    session: session!,
+                    dataStream,
+                  }),
+                },
+                experimental_telemetry: {
+                  isEnabled: isProductionEnvironment,
+                  functionId: 'stream-text-fallback',
+                },
+              });
+
+              console.log(`[${requestId}] Fallback StreamText result created, consuming stream`);
+              result.consumeStream();
+
+              console.log(`[${requestId}] Merging fallback result stream with data stream`);
+              dataStream.merge(
+                result.toUIMessageStream({
+                  sendReasoning: true,
+                }),
+              );
+            }
+
+          } else {
+            // Single-stage processing for regular models
+            console.log(`[${requestId}] Single-stage processing with model: ${selectedChatModel}`);
+
+            const result = streamText({
+              model: myProvider.languageModel(selectedChatModel!),
+              system: systemPrompt({
+                selectedChatModel: selectedChatModel!,
+                requestHints,
+                existingKnowledgePoints
               }),
-            },
-            experimental_telemetry: {
-              isEnabled: isProductionEnvironment,
-              functionId: 'stream-text',
-            },
-          });
+              messages: modelMessages,
+              stopWhen: stepCountIs(5),
+              experimental_activeTools: ['searchKnowledgePoints'],
+              experimental_transform: smoothStream({ chunking: 'word' }),
+              tools: {
+                searchKnowledgePoints: searchKnowledgePoints({
+                  session: session!,
+                  dataStream,
+                }),
+              },
+              experimental_telemetry: {
+                isEnabled: isProductionEnvironment,
+                functionId: 'stream-text',
+              },
+            });
 
-          console.log(`[${requestId}] StreamText result created, consuming stream`);
-          result.consumeStream();
+            console.log(`[${requestId}] StreamText result created, consuming stream`);
+            result.consumeStream();
 
-          console.log(`[${requestId}] Merging result stream with data stream`);
-          dataStream.merge(
-            result.toUIMessageStream({
-              sendReasoning: true,
-            }),
-          );
+            console.log(`[${requestId}] Merging result stream with data stream`);
+            dataStream.merge(
+              result.toUIMessageStream({
+                sendReasoning: true,
+              }),
+            );
+          }
           
           console.log(`[${requestId}] Stream execution setup completed`);
         } catch (error) {
