@@ -21,10 +21,10 @@ function PureSuggestedActions({
 }: SuggestedActionsProps) {
   const { t } = useTranslation();
   const suggestedActions = [
-    t('suggestions.nextjsAdvantages'),
-    t('suggestions.dijkstraAlgorithm'),
-    t('suggestions.siliconValleyEssay'),
-    t('suggestions.sanFranciscoWeather'),
+    t('suggestions.fibonacciSequence'),
+    t('suggestions.arithmeticProgression'),
+    t('suggestions.geometricProgression'),
+    t('suggestions.sequenceLimit'),
   ];
 
   return (

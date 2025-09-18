@@ -180,10 +180,10 @@
     "cut": "剪切"
   },
   "suggestions": {
-    "nextjsAdvantages": "使用 Next.js 有什么优势？",
-    "dijkstraAlgorithm": "编写代码演示 Dijkstra 算法",
-    "siliconValleyEssay": "帮我写一篇关于硅谷的文章",
-    "sanFranciscoWeather": "旧金山的天气怎么样？"
+    "fibonacciSequence": "解释斐波那契数列及其性质",
+    "arithmeticProgression": "什么是等差数列，如何求其和？",
+    "geometricProgression": "解释等比数列及其应用",
+    "sequenceLimit": "如何用不同方法求数列的极限？"
   },
   "tool": {
     "pending": "等待中",

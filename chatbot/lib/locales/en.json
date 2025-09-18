@@ -180,10 +180,10 @@
     "cut": "Cut"
   },
   "suggestions": {
-    "nextjsAdvantages": "What are the advantages of using Next.js?",
-    "dijkstraAlgorithm": "Write code to demonstrate Dijkstra's algorithm",
-    "siliconValleyEssay": "Help me write an essay about Silicon Valley",
-    "sanFranciscoWeather": "What is the weather in San Francisco?"
+    "fibonacciSequence": "Explain the Fibonacci sequence and its properties",
+    "arithmeticProgression": "What is an arithmetic progression and how to find its sum?",
+    "geometricProgression": "Explain geometric progression and its applications",
+    "sequenceLimit": "How to find the limit of a sequence using different methods?"
   },
   "tool": {
     "pending": "Pending",
