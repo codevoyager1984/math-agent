@@ -4,10 +4,6 @@ import {
   wrapLanguageModel,
 } from 'ai';
 import { deepseek } from '@ai-sdk/deepseek';
-import { openai } from '@ai-sdk/openai';
-import { xai } from '@ai-sdk/xai';
-import { anthropic } from '@ai-sdk/anthropic';
-import { gateway } from '@ai-sdk/gateway';
 import {
   artifactModel,
   chatModel,
@@ -28,7 +24,10 @@ export const myProvider = isTestEnvironment
   : customProvider({
       languageModels: {
         'chat-model': deepseek('deepseek-chat'),
-        'chat-model-reasoning': deepseek('deepseek-reasoner'),
+        'chat-model-reasoning': wrapLanguageModel({
+          model: deepseek('deepseek-reasoner'),
+          middleware: extractReasoningMiddleware({ tagName: 'think' }),
+        }),
         'title-model': deepseek('deepseek-chat'),
         'artifact-model': deepseek('deepseek-chat'),
       },

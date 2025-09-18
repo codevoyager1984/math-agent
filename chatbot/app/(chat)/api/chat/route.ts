@@ -40,6 +40,7 @@ import type { ChatMessage } from '@/lib/types';
 import type { ChatModel } from '@/lib/ai/models';
 import type { VisibilityType } from '@/components/visibility-selector';
 import { Session } from 'next-auth';
+import { deepseek } from '@ai-sdk/deepseek';
 
 export const maxDuration = 60;
 
@@ -357,13 +358,13 @@ export async function POST(request: Request) {
             //       ],
             experimental_transform: smoothStream({ chunking: 'word' }),
             tools: {
-              getWeather,
-              createDocument: createDocument({ session: session!, dataStream }),
-              updateDocument: updateDocument({ session: session!, dataStream }),
-              requestSuggestions: requestSuggestions({
-                session: session!,
-                dataStream,
-              }),
+              // getWeather,
+              // createDocument: createDocument({ session: session!, dataStream }),
+              // updateDocument: updateDocument({ session: session!, dataStream }),
+              // requestSuggestions: requestSuggestions({
+              //   session: session!,
+              //   dataStream,
+              // }),
               searchKnowledgePoints: searchKnowledgePoints({
                 session: session!,
                 dataStream,
@@ -398,6 +399,7 @@ export async function POST(request: Request) {
       },
       generateId: generateUUID,
       onFinish: async ({ messages }) => {
+        console.log('messages', messages);
         console.log(`[${requestId}] Stream finished, saving ${messages.length} AI messages`);
         const saveAIStart = Date.now();
         
