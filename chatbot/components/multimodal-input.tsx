@@ -19,6 +19,7 @@ import { PreviewAttachment } from './preview-attachment';
 import { Button } from './ui/button';
 import { Loader } from './elements/loader';
 import { SuggestedActions } from './suggested-actions';
+import { useTranslation } from 'react-i18next';
 import {
   PromptInput,
   PromptInputTextarea,
@@ -75,6 +76,7 @@ function PureMultimodalInput({
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { width } = useWindowSize();
+  const { t } = useTranslation();
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -205,13 +207,13 @@ function PureMultimodalInput({
                 : a
             )
           );
-          toast.success('图片文字识别完成');
+          toast.success(t('attachments.ocrCompleted'));
         } else {
-          throw new Error(data.error || 'OCR failed');
+          throw new Error(data.error || t('errors.ocrFailed'));
         }
       } else {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'OCR request failed');
+        throw new Error(errorData.error || t('errors.ocrRequestFailed'));
       }
     } catch (error) {
       console.error('OCR error:', error);
@@ -223,7 +225,7 @@ function PureMultimodalInput({
             : a
         )
       );
-      toast.error('图片文字识别失败');
+      toast.error(t('attachments.ocrFailed'));
     } finally {
       // Always clear global OCR loading state
       setOcrInProgress(false);
@@ -260,7 +262,7 @@ function PureMultimodalInput({
       const { error } = await response.json();
       toast.error(error);
     } catch (error) {
-      toast.error('Failed to upload file, please try again!');
+      toast.error(t('errors.uploadFailed'));
     }
   };
 
@@ -308,7 +310,7 @@ function PureMultimodalInput({
         event.preventDefault();
         const fileCount = files.length;
         const fileText = fileCount === 1 ? 'file' : 'files';
-        toast.success(`Uploading ${fileCount} ${fileText}...`);
+        toast.success(t('attachments.uploadingFiles', { count: fileCount }));
         await handleFiles(files);
       }
     },
@@ -367,8 +369,8 @@ function PureMultimodalInput({
             <div className="flex items-center gap-3">
               <Loader size={20} />
               <div className="flex-1">
-                <div className="text-sm font-medium text-foreground">图片文字识别中</div>
-                <div className="text-xs text-muted-foreground">正在使用AI识别图片中的文字内容，您可以继续输入文字，识别完成后即可发送消息</div>
+                <div className="text-sm font-medium text-foreground">{t('attachments.ocrInProgress')}</div>
+                <div className="text-xs text-muted-foreground">{t('attachments.ocrInProgressDescription')}</div>
               </div>
             </div>
             <div className="mt-2 w-full bg-background rounded-full h-1.5">
@@ -396,9 +398,9 @@ function PureMultimodalInput({
         onSubmit={(event) => {
           event.preventDefault();
           if (status !== 'ready') {
-            toast.error('Please wait for the model to finish its response!');
+            toast.error(t('chat.waitForModelResponse'));
           } else if (ocrInProgress) {
-            toast.error('请等待图片文字识别完成后再发送消息');
+            toast.error(t('chat.waitForOcrCompletion'));
           } else {
             submitForm();
           }
@@ -442,7 +444,7 @@ function PureMultimodalInput({
             {ocrInProgress && (
               <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader size={16} />
-                <span>正在识别图片文字，识别完成后可发送消息</span>
+                <span>{t('attachments.ocrInProgressShort')}</span>
               </div>
             )}
           </div>
@@ -451,7 +453,7 @@ function PureMultimodalInput({
         <PromptInputTextarea
           data-testid="multimodal-input"
           ref={textareaRef}
-          placeholder={ocrInProgress ? "正在识别图片文字，完成后可发送消息..." : "Send a message..."}
+          placeholder={ocrInProgress ? t('chat.ocrInProgressPlaceholder') : t('chat.sendMessagePlaceholder')}
           value={input}
           onChange={handleInput}
           onPaste={handlePaste}
@@ -531,14 +533,15 @@ function PureModelSelectorCompact({
   selectedModelId: string;
 }) {
   const [optimisticModelId, setOptimisticModelId] = useState(selectedModelId);
+  const { t } = useTranslation();
 
   const selectedModel = chatModels.find(model => model.id === optimisticModelId);
 
   return (
     <PromptInputModelSelect
-      value={selectedModel?.name}
-      onValueChange={(modelName) => {
-        const model = chatModels.find(m => m.name === modelName);
+      value={selectedModel?.id}
+      onValueChange={(modelId) => {
+        const model = chatModels.find(m => m.id === modelId);
         if (model) {
           setOptimisticModelId(model.id);
           startTransition(() => {
@@ -551,14 +554,14 @@ function PureModelSelectorCompact({
         type="button"
         className="text-xs focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:ring-0 data-[state=closed]:ring-0"
       >
-        {selectedModel?.name || "Select model"}
+        {selectedModel ? t(selectedModel.name) : t('chat.selectModel')}
       </PromptInputModelSelectTrigger>
       <PromptInputModelSelectContent>
         {chatModels.map((model) => (
-          <SelectItem key={model.id} value={model.name}>
+          <SelectItem key={model.id} value={model.id}>
             <div className="flex flex-col items-start gap-1 py-1">
-              <div className="font-medium">{model.name}</div>
-              <div className="text-xs text-muted-foreground">{model.description}</div>
+              <div className="font-medium">{t(model.name)}</div>
+              <div className="text-xs text-muted-foreground">{t(model.description)}</div>
             </div>
           </SelectItem>
         ))}

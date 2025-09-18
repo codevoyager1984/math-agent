@@ -29,6 +29,7 @@ import type { ChatMessage } from '@/lib/types';
 import { useDataStream } from './data-stream-provider';
 import { KnowledgeSearch } from './knowledge-search';
 import { KnowledgeSearchInput } from './knowledge-search-input';
+import { useTranslation } from 'react-i18next';
 
 // Type narrowing is handled by TypeScript's control flow analysis
 // The AI SDK provides proper discriminated unions for tool calls
@@ -54,6 +55,7 @@ const PurePreviewMessage = ({
   requiresScrollPadding: boolean;
   isArtifactVisible: boolean;
 }) => {
+  const { t } = useTranslation();
   const [mode, setMode] = useState<'view' | 'edit'>('view');
 
   const attachmentsFromMessage = message.parts.filter(
@@ -214,7 +216,7 @@ const PurePreviewMessage = ({
                       key={toolCallId}
                       className="p-4 text-red-500 bg-red-50 rounded-lg border border-red-200 dark:bg-red-950/50"
                     >
-                      Error creating document: {String(part.output.error)}
+                      {t('errors.errorCreatingDocument')}: {String(part.output.error)}
                     </div>
                   );
                 }
@@ -234,7 +236,7 @@ const PurePreviewMessage = ({
                 if (part.output && 'error' in part.output) {
                   return (
                     <div key={toolCallId} className="p-4 text-red-500 rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/50">
-                      Error updating document: {String(part.output.error)}
+                      {t('errors.errorUpdatingDocument')}: {String(part.output.error)}
                     </div>
                   );
                 }
@@ -265,7 +267,7 @@ const PurePreviewMessage = ({
                           output={
                             'error' in part.output ? (
                               <div className="p-2 text-red-500 rounded border">
-                                Error: {String(part.output.error)}
+                                {t('errors.error')}: {String(part.output.error)}
                               </div>
                             ) : (
                               <DocumentToolResult
@@ -319,7 +321,7 @@ const PurePreviewMessage = ({
                           output={
                             'error' in part.output ? (
                               <div className="p-2 text-red-500 rounded border">
-                                Error: {String(part.output.error)}
+                                {t('errors.error')}: {String(part.output.error)}
                               </div>
                             ) : (
                               <KnowledgeSearch

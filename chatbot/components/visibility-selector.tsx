@@ -16,25 +16,26 @@ import {
   LockIcon,
 } from './icons';
 import { useChatVisibility } from '@/hooks/use-chat-visibility';
+import { useTranslation } from 'react-i18next';
 
 export type VisibilityType = 'private' | 'public';
 
-const visibilities: Array<{
+const getVisibilities = (t: (key: string) => string): Array<{
   id: VisibilityType;
   label: string;
   description: string;
   icon: ReactNode;
-}> = [
+}> => [
   {
     id: 'private',
-    label: 'Private',
-    description: 'Only you can access this chat',
+    label: t('visibility.private'),
+    description: t('visibility.privateDescription'),
     icon: <LockIcon />,
   },
   {
     id: 'public',
-    label: 'Public',
-    description: 'Anyone with the link can access this chat',
+    label: t('visibility.public'),
+    description: t('visibility.publicDescription'),
     icon: <GlobeIcon />,
   },
 ];
@@ -48,15 +49,17 @@ export function VisibilitySelector({
   selectedVisibilityType: VisibilityType;
 } & React.ComponentProps<typeof Button>) {
   const [open, setOpen] = useState(false);
+  const { t } = useTranslation();
 
   const { visibilityType, setVisibilityType } = useChatVisibility({
     chatId,
     initialVisibilityType: selectedVisibilityType,
   });
 
+  const visibilities = getVisibilities(t);
   const selectedVisibility = useMemo(
     () => visibilities.find((visibility) => visibility.id === visibilityType),
-    [visibilityType],
+    [visibilityType, visibilities],
   );
 
   return (

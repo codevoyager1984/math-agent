@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BookOpenIcon, TagIcon, LoaderIcon, AlertCircleIcon, XIcon } from 'lucide-react';
 import { Badge } from './ui/badge';
+import { useTranslation } from 'react-i18next';
 
 interface KnowledgePoint {
   id: string;
@@ -35,6 +36,7 @@ export function KnowledgeTooltip({ knowledgeId, displayText }: KnowledgeTooltipP
   const [error, setError] = useState<string | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
   const spanRef = useRef<HTMLSpanElement>(null);
+  const { t } = useTranslation();
 
   const fetchKnowledgePoint = async (id: string) => {
     // 检查缓存
@@ -51,7 +53,7 @@ export function KnowledgeTooltip({ knowledgeId, displayText }: KnowledgeTooltipP
       const response = await fetch(`${ragServerUrl}/api/knowledge-base/documents/${id}`);
       
       if (!response.ok) {
-        throw new Error('知识点不存在');
+        throw new Error(t('knowledge.knowledgePointNotFound'));
       }
 
       const data = await response.json();
@@ -68,7 +70,7 @@ export function KnowledgeTooltip({ knowledgeId, displayText }: KnowledgeTooltipP
       knowledgeCache.set(id, knowledgePoint);
       setKnowledge(knowledgePoint);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '获取知识点失败');
+      setError(err instanceof Error ? err.message : t('knowledge.failedToFetchKnowledge'));
     } finally {
       setIsLoading(false);
     }

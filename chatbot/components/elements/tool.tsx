@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
 import { CodeBlock } from './code-block';
+import { useTranslation } from 'react-i18next';
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
@@ -35,12 +36,12 @@ export type ToolHeaderProps = {
   customTitle?: string; // 自定义标题
 };
 
-const getStatusBadge = (status: ToolUIPart['state']) => {
+const getStatusBadge = (status: ToolUIPart['state'], t: (key: string) => string) => {
   const labels = {
-    'input-streaming': 'Pending',
-    'input-available': 'Running',
-    'output-available': 'Completed',
-    'output-error': 'Error',
+    'input-streaming': t('tool.pending'),
+    'input-available': t('tool.running'),
+    'output-available': t('tool.completed'),
+    'output-error': t('tool.error'),
   } as const;
 
   const icons = {
@@ -76,26 +77,31 @@ export const ToolHeader = ({
   state,
   customTitle,
   ...props
-}: ToolHeaderProps) => (
-  <CollapsibleTrigger
-    className={cn(
-      'flex w-full items-center justify-between gap-2 p-3 min-w-0',
-      className,
-    )}
-    {...props}
-  >
-    <div className="flex items-center gap-2 min-w-0 flex-1">
-      <WrenchIcon className="size-4 text-muted-foreground shrink-0" />
-      <span className="font-medium text-sm truncate">
-        {customTitle || getToolDisplayName(type)}
-      </span>
-    </div>
-    <div className="flex items-center gap-2 shrink-0">
-      {getStatusBadge(state)}
-      <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-    </div>
-  </CollapsibleTrigger>
-);
+}: ToolHeaderProps) => {
+  const { t } = useTranslation();
+  const statusBadge = getStatusBadge(state, t);
+  
+  return (
+    <CollapsibleTrigger
+      className={cn(
+        'flex w-full items-center justify-between gap-2 p-3 min-w-0',
+        className,
+      )}
+      {...props}
+    >
+      <div className="flex items-center gap-2 min-w-0 flex-1">
+        <WrenchIcon className="size-4 text-muted-foreground shrink-0" />
+        <span className="font-medium text-sm truncate">
+          {customTitle || getToolDisplayName(type)}
+        </span>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        {statusBadge}
+        <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+      </div>
+    </CollapsibleTrigger>
+  );
+};
 
 export type ToolContentProps = ComponentProps<typeof CollapsibleContent>;
 

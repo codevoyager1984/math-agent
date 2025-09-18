@@ -5,6 +5,7 @@ import Image from 'next/image';
 import type { User } from 'next-auth';
 import { signOut, useSession } from 'next-auth/react';
 import { useTheme } from 'next-themes';
+import { useTranslation } from 'react-i18next';
 
 import {
   DropdownMenu,
@@ -22,11 +23,13 @@ import { useRouter } from 'next/navigation';
 import { toast } from './toast';
 import { LoaderIcon } from './icons';
 import { guestRegex } from '@/lib/constants';
+import { LanguageSelector } from './language-selector';
 
 export function SidebarUserNav({ user }: { user: User }) {
   const router = useRouter();
   const { data, status } = useSession();
   const { setTheme, resolvedTheme } = useTheme();
+  const { t } = useTranslation();
 
   const isGuest = guestRegex.test(data?.user?.email ?? '');
 
@@ -40,7 +43,7 @@ export function SidebarUserNav({ user }: { user: User }) {
                 <div className="flex flex-row gap-2">
                   <div className="size-6 bg-zinc-500/30 rounded-full animate-pulse" />
                   <span className="bg-zinc-500/30 text-transparent rounded-md animate-pulse">
-                    Loading auth status
+                    {t('auth.loadingAuthStatus')}
                   </span>
                 </div>
                 <div className="animate-spin text-zinc-500">
@@ -60,7 +63,7 @@ export function SidebarUserNav({ user }: { user: User }) {
                   className="rounded-full"
                 />
                 <span data-testid="user-email" className="truncate">
-                  {isGuest ? 'Guest' : user?.email}
+                  {isGuest ? t('auth.guest') : user?.email}
                 </span>
                 <ChevronUp className="ml-auto" />
               </SidebarMenuButton>
@@ -76,8 +79,12 @@ export function SidebarUserNav({ user }: { user: User }) {
               className="cursor-pointer"
               onSelect={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
             >
-              {`Toggle ${resolvedTheme === 'light' ? 'dark' : 'light'} mode`}
+              {resolvedTheme === 'light' ? t('theme.toggleDarkMode') : t('theme.toggleLightMode')}
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <div className="px-2 py-1">
+              <LanguageSelector />
+            </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild data-testid="user-nav-item-auth">
               <button
@@ -87,8 +94,7 @@ export function SidebarUserNav({ user }: { user: User }) {
                   if (status === 'loading') {
                     toast({
                       type: 'error',
-                      description:
-                        'Checking authentication status, please try again!',
+                      description: t('auth.checkingAuthStatus'),
                     });
 
                     return;
@@ -103,7 +109,7 @@ export function SidebarUserNav({ user }: { user: User }) {
                   }
                 }}
               >
-                {isGuest ? 'Login to your account' : 'Sign out'}
+                {isGuest ? t('auth.loginToAccount') : t('auth.signOut')}
               </button>
             </DropdownMenuItem>
           </DropdownMenuContent>

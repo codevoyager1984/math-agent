@@ -4,6 +4,7 @@ import { CrossSmallIcon, } from './icons';
 import { Button } from './ui/button';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 
 export const PreviewAttachment = ({
   attachment,
@@ -18,6 +19,7 @@ export const PreviewAttachment = ({
 }) => {
   const { name, url, contentType, ocrText, ocrLoading } = attachment;
   const [showPreview, setShowPreview] = useState(false);
+  const { t } = useTranslation();
 
   const handleImageClick = () => {
     if (contentType?.startsWith('image') && url && !isUploading) {
@@ -56,7 +58,7 @@ export const PreviewAttachment = ({
           >
             <img
               src={url}
-              alt={name ?? 'An image attachment'}
+              alt={name ?? t('attachments.imageAttachment')}
               className="size-full object-cover hover:opacity-80 transition-opacity"
             />
             {/* Hover overlay with magnifier icon */}
@@ -157,7 +159,7 @@ export const PreviewAttachment = ({
               <div className="flex items-center justify-center p-4">
                 <img
                   src={url}
-                  alt={name ?? 'Preview'}
+                  alt={name ?? t('attachments.preview')}
                   className="max-w-full max-h-[70vh] object-contain"
                   style={{ minHeight: '200px' }}
                   onError={(e) => {

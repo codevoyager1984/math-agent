@@ -9,6 +9,7 @@ import { memo } from 'react';
 import equal from 'fast-deep-equal';
 import { toast } from 'sonner';
 import type { ChatMessage } from '@/lib/types';
+import { useTranslation } from 'react-i18next';
 
 export function PureMessageActions({
   chatId,
@@ -23,6 +24,7 @@ export function PureMessageActions({
 }) {
   const { mutate } = useSWRConfig();
   const [_, copyToClipboard] = useCopyToClipboard();
+  const { t } = useTranslation();
 
   if (isLoading) return null;
   if (message.role === 'user') return null;
@@ -30,7 +32,7 @@ export function PureMessageActions({
   return (
     <Actions>
         <Action
-          tooltip="Copy"
+          tooltip={t('common.copy')}
           onClick={async () => {
             const textFromParts = message.parts
               ?.filter((part) => part.type === 'text')
@@ -39,12 +41,12 @@ export function PureMessageActions({
               .trim();
 
             if (!textFromParts) {
-              toast.error("There's no text to copy!");
+              toast.error(t('chat.noTextToCopy'));
               return;
             }
 
             await copyToClipboard(textFromParts);
-            toast.success('Copied to clipboard!');
+            toast.success(t('chat.copiedToClipboard'));
           }}
         >
           <CopyIcon />
@@ -88,9 +90,9 @@ export function PureMessageActions({
                       { revalidate: false },
                     );
 
-                    return 'Upvoted Response!';
+                    return t('chat.upvotedResponse');
                   },
-                  error: 'Failed to upvote response.',
+                  error: t('chat.failedToUpvote'),
                 });
               }}
         >
@@ -135,9 +137,9 @@ export function PureMessageActions({
                       { revalidate: false },
                     );
 
-                    return 'Downvoted Response!';
+                    return t('chat.downvotedResponse');
                   },
-                  error: 'Failed to downvote response.',
+                  error: t('chat.failedToDownvote'),
                 });
               }}
         >

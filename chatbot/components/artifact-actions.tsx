@@ -5,6 +5,7 @@ import { type Dispatch, memo, type SetStateAction, useState } from 'react';
 import type { ArtifactActionContext } from './create-artifact';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useTranslation } from 'react-i18next';
 
 interface ArtifactActionsProps {
   artifact: UIArtifact;
@@ -26,6 +27,7 @@ function PureArtifactActions({
   setMetadata,
 }: ArtifactActionsProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const { t } = useTranslation();
 
   const artifactDefinition = artifactDefinitions.find(
     (definition) => definition.kind === artifact.kind,
@@ -62,7 +64,7 @@ function PureArtifactActions({
                 try {
                   await Promise.resolve(action.onClick(actionContext));
                 } catch (error) {
-                  toast.error('Failed to execute action');
+                  toast.error(t('artifacts.failedToExecuteAction'));
                 } finally {
                   setIsLoading(false);
                 }
