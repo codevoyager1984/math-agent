@@ -42,6 +42,11 @@ export const Response = memo(
       const hasKnowledgeTags = knowledgeTags.length > 0;
       
       let processed = children
+        // 处理 align* 环境 - 转换为 aligned (KaTeX 更好支持)
+        .replace(/\\begin\{align\*\}([\s\S]*?)\\end\{align\*\}/g, '\n$$\\begin{aligned}$1\\end{aligned}$$\n')
+        // 处理其他 LaTeX 环境
+        .replace(/\\begin\{(equation\*?|gather\*?|multline\*?)\}/g, '\n$$\\begin{$1}')
+        .replace(/\\end\{(equation\*?|gather\*?|multline\*?)\}/g, '\\end{$1}$$\n')
         // 替换 \[ \] 为 $$ $$ (块级数学公式)
         .replace(/\\\[/g, '\n$$')
         .replace(/\\\]/g, '$$\n')
