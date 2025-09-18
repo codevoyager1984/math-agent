@@ -180,10 +180,10 @@
     "cut": "Cut"
   },
   "suggestions": {
-    "fibonacciSequence": "Explain the Fibonacci sequence and its properties",
-    "arithmeticProgression": "What is an arithmetic progression and how to find its sum?",
-    "geometricProgression": "Explain geometric progression and its applications",
-    "sequenceLimit": "How to find the limit of a sequence using different methods?"
+    "fibonacciSequence": "Find the 20th term of the Fibonacci sequence: 1, 1, 2, 3, 5, 8, ...",
+    "arithmeticProgression": "Find the sum of the first 15 terms of the arithmetic sequence: 3, 7, 11, 15, ...",
+    "geometricProgression": "Find the sum of the first 10 terms of the geometric sequence: 2, 6, 18, 54, ...",
+    "sequenceLimit": "Find the limit of the sequence: a_n = (n² + 3n) / (2n² - 1) as n approaches infinity"
   },
   "tool": {
     "pending": "Pending",

@@ -180,10 +180,10 @@
     "cut": "剪切"
   },
   "suggestions": {
-    "fibonacciSequence": "解释斐波那契数列及其性质",
-    "arithmeticProgression": "什么是等差数列，如何求其和？",
-    "geometricProgression": "解释等比数列及其应用",
-    "sequenceLimit": "如何用不同方法求数列的极限？"
+    "fibonacciSequence": "求斐波那契数列的第20项：1, 1, 2, 3, 5, 8, ...",
+    "arithmeticProgression": "求等差数列前15项的和：3, 7, 11, 15, ...",
+    "geometricProgression": "求等比数列前10项的和：2, 6, 18, 54, ...",
+    "sequenceLimit": "求数列的极限：a_n = (n² + 3n) / (2n² - 1) 当n趋于无穷大时"
   },
   "tool": {
     "pending": "等待中",
