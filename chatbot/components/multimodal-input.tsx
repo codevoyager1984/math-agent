@@ -493,7 +493,7 @@ function PureMultimodalInput({
             <AttachmentsButton fileInputRef={fileInputRef} status={status} ocrInProgress={ocrInProgress || hasOcrInProgress()} />
             <ModelSelectorCompact selectedModelId={selectedModelId} />
           </PromptInputTools>
-          {status === 'submitted' ? (
+          {status !== 'ready' ? (
             <StopButton stop={stop} setMessages={setMessages} />
           ) : (
             <PromptInputSubmit
@@ -602,15 +602,19 @@ function PureStopButton({
   stop: () => void;
   setMessages: UseChatHelpers<ChatMessage>['setMessages'];
 }) {
+  const { t } = useTranslation();
+  
   return (
     <Button
       data-testid="stop-button"
-      className="rounded-full p-1.5 h-fit border dark:border-zinc-600"
+      className="rounded-full p-1.5 h-fit border dark:border-zinc-600 hover:bg-red-50 hover:border-red-300 dark:hover:bg-red-950 dark:hover:border-red-600"
       onClick={(event) => {
         event.preventDefault();
         stop();
         setMessages((messages) => messages);
+        toast.success(t('chat.responseStopped'));
       }}
+      title={t('chat.stopGeneration')}
     >
       <StopIcon size={14} />
     </Button>

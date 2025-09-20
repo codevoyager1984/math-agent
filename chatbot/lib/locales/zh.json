@@ -72,6 +72,8 @@
     "waitForFileUpload": "请等待文件上传完成后再发送消息",
     "waitForOcrCompletion": "请等待图片文字识别完成后再发送消息",
     "emptyMessage": "请输入消息内容或上传文件后再发送",
+    "stopGeneration": "停止生成",
+    "responseStopped": "已停止生成回复",
     "sendMessagePlaceholder": "发送消息...",
     "ocrInProgressPlaceholder": "正在识别图片文字，完成后可发送消息...",
     "upvoteResponse": "点赞回复",

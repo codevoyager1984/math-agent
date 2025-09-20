@@ -72,6 +72,8 @@
     "waitForFileUpload": "Please wait for file upload to complete before sending message",
     "waitForOcrCompletion": "Please wait for image text recognition to complete before sending message",
     "emptyMessage": "Please enter message content or upload files before sending",
+    "stopGeneration": "Stop Generation",
+    "responseStopped": "Response generation stopped",
     "sendMessagePlaceholder": "Send a message...",
     "ocrInProgressPlaceholder": "Image text recognition in progress, you can send message after completion...",
     "upvoteResponse": "Upvote Response",

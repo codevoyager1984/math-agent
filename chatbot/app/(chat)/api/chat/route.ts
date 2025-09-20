@@ -392,6 +392,7 @@ ${existingKnowledgePoints.join(', ')}
 
 请详细思考如何最好地解答用户的问题。`,
                 messages: reasoningMessages as ModelMessage[],
+                abortSignal: request.signal,
                 experimental_telemetry: {
                   isEnabled: isProductionEnvironment,
                   functionId: 'reasoning-stage',
@@ -473,6 +474,7 @@ ${existingKnowledgePoints.join(', ')}
                 stopWhen: stepCountIs(5),
                 experimental_activeTools: ['searchKnowledgePoints'],
                 experimental_transform: smoothStream({ chunking: 'word' }),
+                abortSignal: request.signal,
                 tools: {
                   searchKnowledgePoints: searchKnowledgePoints({
                     session: session!,
@@ -521,6 +523,7 @@ ${existingKnowledgePoints.join(', ')}
                 stopWhen: stepCountIs(5),
                 experimental_activeTools: ['searchKnowledgePoints'],
                 experimental_transform: smoothStream({ chunking: 'word' }),
+                abortSignal: request.signal,
                 tools: {
                   searchKnowledgePoints: searchKnowledgePoints({
                     session: session!,
@@ -559,6 +562,7 @@ ${existingKnowledgePoints.join(', ')}
               stopWhen: stepCountIs(5),
               experimental_activeTools: ['searchKnowledgePoints'],
               experimental_transform: smoothStream({ chunking: 'word' }),
+              abortSignal: request.signal,
               tools: {
                 searchKnowledgePoints: searchKnowledgePoints({
                   session: session!,
