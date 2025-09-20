@@ -127,8 +127,19 @@ function PureMultimodalInput({
   const [uploadQueue, setUploadQueue] = useState<Array<string>>([]);
   const [ocrInProgress, setOcrInProgress] = useState<boolean>(false);
 
+  // Check if any image attachments are still processing OCR
+  const hasOcrInProgress = useCallback(() => {
+    return attachments.some(attachment => 
+      attachment.contentType.startsWith('image/') && attachment.ocrLoading
+    );
+  }, [attachments]);
+
   const submitForm = useCallback(() => {
-    window.history.replaceState({}, '', `/chat/${chatId}`);
+    // Prevent submission if any OCR is still in progress
+    if (hasOcrInProgress()) {
+      toast.error(t('chat.waitForOcrCompletion'));
+      return;
+    }
 
     // Collect OCR text from image attachments
     const ocrTexts = attachments
@@ -138,6 +149,14 @@ function PureMultimodalInput({
 
     // Combine input text with OCR results
     const fullText = [input, ocrTexts].filter(Boolean).join('\n\n');
+
+    // Check if there's any meaningful content to send
+    if (!fullText.trim() && attachments.length === 0) {
+      toast.error(t('chat.emptyMessage'));
+      return;
+    }
+
+    window.history.replaceState({}, '', `/chat/${chatId}`);
 
     sendMessage({
       role: 'user',
@@ -172,6 +191,8 @@ function PureMultimodalInput({
     setLocalStorageInput,
     width,
     chatId,
+    hasOcrInProgress,
+    t,
   ]);
 
   const performOCR = async (imageUrl: string, attachment: Attachment) => {
@@ -363,7 +384,7 @@ function PureMultimodalInput({
         )}
 
       {/* Global OCR Progress Bar */}
-      {ocrInProgress && (
+      {(ocrInProgress || hasOcrInProgress()) && (
         <div className="w-full max-w-2xl mx-auto mb-4">
           <div className="bg-muted rounded-lg p-3 border border-orange-300 dark:border-orange-600">
             <div className="flex items-center gap-3">
@@ -391,7 +412,7 @@ function PureMultimodalInput({
 
       <PromptInput
         className={`border transition-all duration-200 shadow-lg shadow-black/10 ${
-          ocrInProgress 
+          (ocrInProgress || hasOcrInProgress())
             ? 'border-orange-300 bg-orange-50/20 dark:bg-orange-950/20 dark:border-orange-600' 
             : 'border-transparent hover:border-primary/20 focus-within:border-primary/30 focus-within:shadow-xl focus-within:shadow-primary/20'
         }`}
@@ -399,7 +420,9 @@ function PureMultimodalInput({
           event.preventDefault();
           if (status !== 'ready') {
             toast.error(t('chat.waitForModelResponse'));
-          } else if (ocrInProgress) {
+          } else if (uploadQueue.length > 0) {
+            toast.error(t('chat.waitForFileUpload'));
+          } else if (ocrInProgress || hasOcrInProgress()) {
             toast.error(t('chat.waitForOcrCompletion'));
           } else {
             submitForm();
@@ -441,7 +464,7 @@ function PureMultimodalInput({
             </div>
             
             {/* Global OCR Progress Indicator */}
-            {ocrInProgress && (
+            {(ocrInProgress || hasOcrInProgress()) && (
               <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader size={16} />
                 <span>{t('attachments.ocrInProgressShort')}</span>
@@ -453,7 +476,7 @@ function PureMultimodalInput({
         <PromptInputTextarea
           data-testid="multimodal-input"
           ref={textareaRef}
-          placeholder={ocrInProgress ? t('chat.ocrInProgressPlaceholder') : t('chat.sendMessagePlaceholder')}
+          placeholder={(ocrInProgress || hasOcrInProgress()) ? t('chat.ocrInProgressPlaceholder') : t('chat.sendMessagePlaceholder')}
           value={input}
           onChange={handleInput}
           onPaste={handlePaste}
@@ -467,7 +490,7 @@ function PureMultimodalInput({
         />
         <PromptInputToolbar className="px-2 py-1">
           <PromptInputTools className="gap-2">
-            <AttachmentsButton fileInputRef={fileInputRef} status={status} ocrInProgress={ocrInProgress} />
+            <AttachmentsButton fileInputRef={fileInputRef} status={status} ocrInProgress={ocrInProgress || hasOcrInProgress()} />
             <ModelSelectorCompact selectedModelId={selectedModelId} />
           </PromptInputTools>
           {status === 'submitted' ? (
@@ -475,7 +498,7 @@ function PureMultimodalInput({
           ) : (
             <PromptInputSubmit
               status={status}
-              disabled={!input.trim() || uploadQueue.length > 0 || ocrInProgress}
+              disabled={!input.trim() || uploadQueue.length > 0 || ocrInProgress || hasOcrInProgress()}
               className="bg-primary hover:bg-primary/90 text-primary-foreground size-8"
               size="sm"
             />
