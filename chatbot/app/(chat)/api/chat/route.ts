@@ -76,6 +76,70 @@ function filterImageAttachments(messages: UIMessage[]): UIMessage[] {
   return filtered;
 }
 
+// Helper function to clean up incomplete tool calls from model messages
+function cleanupIncompleteToolCalls(messages: ModelMessage[]): ModelMessage[] {
+  const cleanedMessages: ModelMessage[] = [];
+  
+  for (let i = 0; i < messages.length; i++) {
+    const message = messages[i];
+    
+    if (message.role === 'assistant') {
+      // Handle both string and array content
+      if (typeof message.content === 'string') {
+        // String content has no tool calls, keep as is
+        cleanedMessages.push(message);
+        continue;
+      }
+      
+      // Check if this assistant message has tool calls
+      const toolCalls = message.content.filter((part: any) => part.type === 'tool-call') as ToolCallPart[];
+      
+      if (toolCalls.length > 0) {
+        // Find all tool response messages that follow this assistant message
+        const toolResponses = new Set<string>();
+        
+        // Look ahead to find tool responses
+        for (let j = i + 1; j < messages.length; j++) {
+          const nextMessage = messages[j];
+          if (nextMessage.role === 'tool') {
+            const toolResult = Array.isArray(nextMessage.content) ? nextMessage.content[0] : null;
+            if (toolResult && toolResult.type === 'tool-result') {
+              toolResponses.add(toolResult.toolCallId);
+            }
+          } else if (nextMessage.role === 'assistant' || nextMessage.role === 'user') {
+            // Stop looking when we hit another assistant or user message
+            break;
+          }
+        }
+        
+        // Filter out tool calls that don't have corresponding responses
+        const validToolCalls = toolCalls.filter(toolCall => toolResponses.has(toolCall.toolCallId));
+        const otherContent = message.content.filter((part: any) => part.type !== 'tool-call');
+        
+        if (validToolCalls.length !== toolCalls.length) {
+          console.log(`🔧 清理不完整的 tool calls: 移除了 ${toolCalls.length - validToolCalls.length} 个没有响应的 tool call`);
+        }
+        
+        // Only include the message if it has valid content (text or valid tool calls)
+        if (otherContent.length > 0 || validToolCalls.length > 0) {
+          cleanedMessages.push({
+            ...message,
+            content: [...otherContent, ...validToolCalls]
+          });
+        }
+      } else {
+        // No tool calls, keep the message as is
+        cleanedMessages.push(message);
+      }
+    } else {
+      // Non-assistant messages, keep as is
+      cleanedMessages.push(message);
+    }
+  }
+  
+  return cleanedMessages;
+}
+
 export function getStreamContext() {
   if (!globalStreamContext) {
     try {
@@ -329,13 +393,21 @@ export async function POST(request: Request) {
         console.log(`[${requestId}] Starting text streaming execution`);
 
         try {
-          const modelMessages = convertToModelMessages(filteredMessages);
+          const rawModelMessages = convertToModelMessages(filteredMessages);
+          const modelMessages = cleanupIncompleteToolCalls(rawModelMessages);
+          
           console.log(`[${requestId}] Converted to model messages:`, {
             messageCount: modelMessages.length,
             model: selectedChatModel,
             activeTools: selectedChatModel === 'chat-model-reasoning' ? [] : ['searchKnowledgePoints'],
             telemetryEnabled: isProductionEnvironment
           });
+          
+          if (rawModelMessages.length !== modelMessages.length) {
+            console.log(`[${requestId}] 🔧 清理后消息数量变化: ${rawModelMessages.length} -> ${modelMessages.length}`);
+          }
+          
+          console.log(`[${requestId}] Model messages:`, JSON.stringify(modelMessages, null, 2));
 
           // Two-stage processing for reasoning model
           if (selectedChatModel === 'chat-model-reasoning') {
@@ -369,12 +441,13 @@ export async function POST(request: Request) {
                 const filteredContent = [];
                 for (const part of content) {
                   if ((part as ToolCallPart).type === 'tool-call') {
+                    // Remove tool calls for reasoning stage
                   } else {
                     filteredContent.push(part);
                   }
                 }
                 return {role, content: filteredContent};
-              })
+              });
               console.log(`[${requestId}] Stage 1: Model messages:`, JSON.stringify(reasoningMessages, null, 2));
               const reasoningResult = streamText({
                 model: myProvider.languageModel('chat-model-reasoning'),
