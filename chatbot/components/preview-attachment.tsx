@@ -96,7 +96,7 @@ export const PreviewAttachment = ({
         )}
 
         <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent text-white text-[10px] px-1 py-0.5 truncate">
-          {name}
+          图片预览
         </div>
       </div>
       
@@ -123,7 +123,7 @@ export const PreviewAttachment = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+            className="fixed inset-0 z-[10002] flex items-center justify-center bg-black/80 backdrop-blur-sm"
             onClick={() => setShowPreview(false)}
           >
             <motion.div
@@ -137,7 +137,7 @@ export const PreviewAttachment = ({
               {/* Header */}
               <div className="flex items-center justify-between p-4 border-b dark:border-gray-700">
                 <div className="flex flex-col">
-                  <h3 className="text-lg font-semibold">{name}</h3>
+                  <h3 className="text-lg font-semibold">图片预览</h3>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <span>{contentType}</span>
                     <span>•</span>
@@ -174,25 +174,6 @@ export const PreviewAttachment = ({
                   }}
                 />
               </div>
-
-              {/* OCR Results */}
-              {ocrText && (
-                <div className="p-4 border-t dark:border-gray-700 bg-muted/50">
-                  <h4 className="text-sm font-medium mb-2">识别结果:</h4>
-                  <div className="text-sm bg-background rounded p-3 max-h-40 overflow-y-auto">
-                    {ocrText}
-                  </div>
-                </div>
-              )}
-
-              {ocrLoading && (
-                <div className="p-4 border-t dark:border-gray-700 bg-muted/50">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader size={16} />
-                    <span>正在识别图片文字...</span>
-                  </div>
-                </div>
-              )}
             </motion.div>
           </motion.div>
         )}
