@@ -17,19 +17,24 @@ import type {
   HTMLAttributes,
   KeyboardEventHandler,
 } from 'react';
-import { Children } from 'react';
+import { Children, forwardRef } from 'react';
 
 export type PromptInputProps = HTMLAttributes<HTMLFormElement>;
 
-export const PromptInput = ({ className, ...props }: PromptInputProps) => (
-  <form
-    className={cn(
-      'w-full overflow-hidden rounded-xl border bg-background shadow-sm',
-      className,
-    )}
-    {...props}
-  />
+export const PromptInput = forwardRef<HTMLFormElement, PromptInputProps>(
+  ({ className, ...props }, ref) => (
+    <form
+      ref={ref}
+      className={cn(
+        'w-full overflow-hidden rounded-xl border bg-background shadow-sm',
+        className,
+      )}
+      {...props}
+    />
+  )
 );
+
+PromptInput.displayName = 'PromptInput';
 
 export type PromptInputTextareaProps = ComponentProps<typeof Textarea> & {
   minHeight?: number;

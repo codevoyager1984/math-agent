@@ -75,13 +75,33 @@ function PureMultimodalInput({
   selectedModelId: string;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const inputContainerRef = useRef<HTMLFormElement>(null);
   const { width } = useWindowSize();
   const { t } = useTranslation();
+  const [inputContainerHeight, setInputContainerHeight] = useState(0);
 
   useEffect(() => {
     if (textareaRef.current) {
       adjustHeight();
     }
+  }, []);
+
+  // Monitor input container height changes
+  useEffect(() => {
+    if (!inputContainerRef.current) return;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const height = entry.contentRect.height;
+        setInputContainerHeight(height);
+      }
+    });
+
+    resizeObserver.observe(inputContainerRef.current);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
   }, []);
 
   const adjustHeight = () => {
@@ -355,7 +375,10 @@ function PureMultimodalInput({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
             transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-            className="absolute bottom-28 left-1/2 z-50 -translate-x-1/2"
+            className="absolute left-1/2 z-50 -translate-x-1/2"
+            style={{ 
+              bottom: `${Math.max(inputContainerHeight + 16, 112)}px` // 16px gap + fallback to 112px (28*4)
+            }}
           >
             <Button
               data-testid="scroll-to-bottom-button"
@@ -384,7 +407,7 @@ function PureMultimodalInput({
         )}
 
       {/* Global OCR Progress Bar */}
-      {(ocrInProgress || hasOcrInProgress()) && (
+      {/* {(ocrInProgress || hasOcrInProgress()) && (
         <div className="w-full max-w-2xl mx-auto mb-4">
           <div className="bg-muted rounded-lg p-3 border border-orange-300 dark:border-orange-600">
             <div className="flex items-center gap-3">
@@ -399,7 +422,7 @@ function PureMultimodalInput({
             </div>
           </div>
         </div>
-      )}
+      )} */}
 
       <input
         type="file"
@@ -411,6 +434,7 @@ function PureMultimodalInput({
       />
 
       <PromptInput
+        ref={inputContainerRef}
         className={`border transition-all duration-200 shadow-lg shadow-black/10 ${
           (ocrInProgress || hasOcrInProgress())
             ? 'border-orange-300 bg-orange-50/20 dark:bg-orange-950/20 dark:border-orange-600' 
@@ -464,12 +488,12 @@ function PureMultimodalInput({
             </div>
             
             {/* Global OCR Progress Indicator */}
-            {(ocrInProgress || hasOcrInProgress()) && (
+            {/* {(ocrInProgress || hasOcrInProgress()) && (
               <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader size={16} />
                 <span>{t('attachments.ocrInProgressShort')}</span>
               </div>
-            )}
+            )} */}
           </div>
         )}
 
