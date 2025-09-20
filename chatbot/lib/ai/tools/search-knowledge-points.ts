@@ -25,7 +25,7 @@ export const searchKnowledgePoints = ({ session, dataStream }: SearchKnowledgePo
         });
 
         // 调用 RAG 服务的知识点查询接口
-        const ragServerUrl = process.env.RAG_SERVER_URL || 'http://localhost:8000';
+        const ragServerUrl = process.env.NEXT_PUBLIC_RAG_SERVER_URL || 'http://localhost:8000';
         const response = await fetch(`${ragServerUrl}/api/knowledge-base/query`, {
           method: 'POST',
           headers: {
