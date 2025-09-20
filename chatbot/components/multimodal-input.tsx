@@ -558,6 +558,7 @@ function PureAttachmentsButton({
 }) {
   return (
     <Button
+      type="button"
       data-testid="attachments-button"
       className="rounded-md rounded-bl-lg p-[7px] h-fit dark:border-zinc-700 hover:dark:bg-zinc-900 hover:bg-zinc-200"
       onClick={(event) => {
@@ -630,6 +631,7 @@ function PureStopButton({
   
   return (
     <Button
+      type="button"
       data-testid="stop-button"
       className="rounded-full p-1.5 h-fit border dark:border-zinc-600 hover:bg-red-50 hover:border-red-300 dark:hover:bg-red-950 dark:hover:border-red-600"
       onClick={(event) => {

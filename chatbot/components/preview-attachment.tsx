@@ -86,6 +86,7 @@ export const PreviewAttachment = ({
 
         {onRemove && !isUploading && (
           <Button
+            type="button"
             onClick={onRemove}
             size="sm"
             variant="destructive"
@@ -96,7 +97,16 @@ export const PreviewAttachment = ({
         )}
 
         <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent text-white text-[10px] px-1 py-0.5 truncate">
-          图片预览
+          {isUploading 
+            ? '上传中...' 
+            : ocrLoading 
+            ? '识别中...' 
+            : ocrText 
+            ? '识别完成' 
+            : contentType?.startsWith('image')
+            ? '图片预览'
+            : '文件预览'
+          }
         </div>
       </div>
       
@@ -145,6 +155,7 @@ export const PreviewAttachment = ({
                   </div>
                 </div>
                 <Button
+                  type="button"
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowPreview(false)}
