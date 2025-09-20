@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { BookOpenIcon, TagIcon, LoaderIcon, AlertCircleIcon, XIcon } from 'lucide-react';
 import { Badge } from './ui/badge';
 import { useTranslation } from 'react-i18next';
+import { Response } from './elements/response';
 
 interface KnowledgePoint {
   id: string;
@@ -49,7 +50,7 @@ export function KnowledgeTooltip({ knowledgeId, displayText }: KnowledgeTooltipP
     setError(null);
 
     try {
-      const ragServerUrl = process.env.RAG_SERVER_URL || 'http://45.78.228.239:18080';
+      const ragServerUrl = 'http://127.0.0.1:8000';
       const response = await fetch(`${ragServerUrl}/api/knowledge-base/documents/${id}`);
       
       if (!response.ok) {
@@ -99,10 +100,27 @@ export function KnowledgeTooltip({ knowledgeId, displayText }: KnowledgeTooltipP
       const scrollX = window.pageXOffset || document.documentElement.scrollLeft;
       const scrollY = window.pageYOffset || document.documentElement.scrollTop;
       
-      setTooltipPosition({
-        x: rect.left + scrollX + rect.width / 2,
-        y: rect.bottom + scrollY + 8
-      });
+      // Calculate position with viewport bounds checking
+      const tooltipWidth = 320; // w-80 = 20rem = 320px
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      
+      let x = rect.left + scrollX + rect.width / 2;
+      let y = rect.bottom + scrollY + 8;
+      
+      // Adjust horizontal position if tooltip would overflow
+      if (x + tooltipWidth / 2 > viewportWidth) {
+        x = viewportWidth - tooltipWidth / 2 - 16; // 16px margin
+      } else if (x - tooltipWidth / 2 < 0) {
+        x = tooltipWidth / 2 + 16; // 16px margin
+      }
+      
+      // Adjust vertical position if tooltip would overflow
+      if (y + 384 > viewportHeight) { // max-h-96 = 384px
+        y = rect.top + scrollY - 8; // Show above the element
+      }
+      
+      setTooltipPosition({ x, y });
     }
   };
 
@@ -131,7 +149,7 @@ export function KnowledgeTooltip({ knowledgeId, displayText }: KnowledgeTooltipP
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 5, scale: 0.95 }}
               transition={{ duration: 0.2 }}
-              className="fixed z-[9999] w-72"
+              className="fixed z-[9999] w-80 max-w-[90vw]"
               style={{
                 left: `${tooltipPosition.x}px`,
                 top: `${tooltipPosition.y}px`,
@@ -140,7 +158,7 @@ export function KnowledgeTooltip({ knowledgeId, displayText }: KnowledgeTooltipP
               onMouseEnter={() => setIsHovered(true)}
               onMouseLeave={handleMouseLeave}
             >
-              <div className="bg-white dark:bg-gray-800 shadow-xl rounded-lg border border-gray-200 dark:border-gray-700 p-4 backdrop-blur-sm">
+              <div className="bg-white dark:bg-gray-800 shadow-xl rounded-lg border border-gray-200 dark:border-gray-700 p-4 backdrop-blur-sm max-h-96 overflow-y-auto">
                 {isLoading && (
                   <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                     <LoaderIcon className="size-4 animate-spin" />
@@ -161,9 +179,11 @@ export function KnowledgeTooltip({ knowledgeId, displayText }: KnowledgeTooltipP
                       <h3 className="font-semibold text-sm text-gray-900 dark:text-white">
                         {knowledge.title}
                       </h3>
-                      <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">
-                        {knowledge.description}
-                      </p>
+                      <div className="text-xs text-gray-600 dark:text-gray-400 mt-1 line-clamp-2">
+                        <Response className="text-xs">
+                          {knowledge.description}
+                        </Response>
+                      </div>
                     </div>
                     
                     <div className="flex items-center gap-2">
@@ -213,7 +233,7 @@ export function KnowledgeTooltip({ knowledgeId, displayText }: KnowledgeTooltipP
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'tween', duration: 0.3 }}
-              className="fixed right-0 top-0 h-full w-96 bg-white dark:bg-gray-900 shadow-2xl z-[10001] overflow-y-auto"
+              className="fixed right-0 top-0 h-full w-[28rem] max-w-[90vw] bg-white dark:bg-gray-900 shadow-2xl z-[10001] overflow-y-auto"
             >
               {/* Header */}
               <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
@@ -252,9 +272,11 @@ export function KnowledgeTooltip({ knowledgeId, displayText }: KnowledgeTooltipP
                       <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
                         {knowledge.title}
                       </h3>
-                      <p className="text-gray-600 dark:text-gray-400 leading-relaxed text-lg">
-                        {knowledge.description}
-                      </p>
+                      <div className="text-gray-600 dark:text-gray-400 leading-relaxed text-lg">
+                        <Response className="text-lg">
+                          {knowledge.description}
+                        </Response>
+                      </div>
                     </div>
 
                     {/* Category and Tags */}
@@ -284,23 +306,27 @@ export function KnowledgeTooltip({ knowledgeId, displayText }: KnowledgeTooltipP
                           {knowledge.examples.map((example, index) => (
                             <div
                               key={index}
-                              className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
+                              className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 space-y-3"
                             >
-                              <div className="mb-3">
+                              <div>
                                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                   例题 {index + 1}:
                                 </span>
-                                <p className="mt-1 text-gray-900 dark:text-white">
-                                  {example.question}
-                                </p>
+                                <div className="mt-1 text-gray-900 dark:text-white">
+                                  <Response className="text-sm">
+                                    {example.question}
+                                  </Response>
+                                </div>
                               </div>
-                              <div className="mb-3">
+                              <div>
                                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
                                   解答:
                                 </span>
-                                <p className="mt-1 text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-                                  {example.solution}
-                                </p>
+                                <div className="mt-1 text-gray-700 dark:text-gray-300">
+                                  <Response className="text-sm">
+                                    {example.solution}
+                                  </Response>
+                                </div>
                               </div>
                               <div>
                                 <Badge 

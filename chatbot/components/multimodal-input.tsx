@@ -133,7 +133,7 @@ function PureMultimodalInput({
     // Collect OCR text from image attachments
     const ocrTexts = attachments
       .filter(attachment => attachment.contentType.startsWith('image/') && attachment.ocrText)
-      .map(attachment => `[图片识别结果] ${attachment.name}: \n ${attachment.ocrText}`)
+      .map(attachment => `[图片识别结果]: \n ${attachment.ocrText}`)
       .join('\n');
 
     // Combine input text with OCR results
