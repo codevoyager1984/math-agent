@@ -44,6 +44,8 @@
     "hello": "Hello there!",
     "howCanIHelp": "How can I help you today?",
     "selectModel": "Select model",
+    "deepThinking": "Deep Thinking",
+    "deepThinkingDescription": "Enable advanced reasoning with step-by-step thinking process",
     "sendMessage": "Send message",
     "typeMessage": "Type a message...",
     "thinking": "Thinking...",

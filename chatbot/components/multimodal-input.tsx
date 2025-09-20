@@ -26,14 +26,7 @@ import {
   PromptInputToolbar,
   PromptInputTools,
   PromptInputSubmit,
-  PromptInputModelSelect,
-  PromptInputModelSelectTrigger,
-  PromptInputModelSelectContent,
 } from './elements/prompt-input';
-import {
-  SelectItem,
-  SelectValue,
-} from '@/components/ui/select';
 import equal from 'fast-deep-equal';
 import type { UseChatHelpers } from '@ai-sdk/react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -41,7 +34,7 @@ import { ArrowDown } from 'lucide-react';
 import { useScrollToBottom } from '@/hooks/use-scroll-to-bottom';
 import type { VisibilityType } from './visibility-selector';
 import type { Attachment, ChatMessage } from '@/lib/types';
-import { chatModels } from '@/lib/ai/models';
+import { DEFAULT_CHAT_MODEL } from '@/lib/ai/models';
 import { saveChatModelAsCookie } from '@/app/(chat)/actions';
 import { startTransition } from 'react';
 
@@ -74,6 +67,7 @@ function PureMultimodalInput({
   selectedVisibilityType: VisibilityType;
   selectedModelId: string;
 }) {
+  const [isDeepThinking, setIsDeepThinking] = useState(selectedModelId === 'chat-model-reasoning');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputContainerRef = useRef<HTMLFormElement>(null);
   const { width } = useWindowSize();
@@ -515,7 +509,16 @@ function PureMultimodalInput({
         <PromptInputToolbar className="px-2 py-1">
           <PromptInputTools className="gap-2">
             <AttachmentsButton fileInputRef={fileInputRef} status={status} ocrInProgress={ocrInProgress || hasOcrInProgress()} />
-            <ModelSelectorCompact selectedModelId={selectedModelId} />
+            <DeepThinkingToggle 
+              isDeepThinking={isDeepThinking} 
+              onToggle={(enabled) => {
+                setIsDeepThinking(enabled);
+                const modelId = enabled ? 'chat-model-reasoning' : 'chat-model';
+                startTransition(() => {
+                  saveChatModelAsCookie(modelId);
+                });
+              }}
+            />
           </PromptInputTools>
           {status !== 'ready' ? (
             <StopButton stop={stop} setMessages={setMessages} />
@@ -575,50 +578,37 @@ function PureAttachmentsButton({
 
 const AttachmentsButton = memo(PureAttachmentsButton);
 
-function PureModelSelectorCompact({
-  selectedModelId,
+function PureDeepThinkingToggle({
+  isDeepThinking,
+  onToggle,
 }: {
-  selectedModelId: string;
+  isDeepThinking: boolean;
+  onToggle: (enabled: boolean) => void;
 }) {
-  const [optimisticModelId, setOptimisticModelId] = useState(selectedModelId);
   const { t } = useTranslation();
 
-  const selectedModel = chatModels.find(model => model.id === optimisticModelId);
-
   return (
-    <PromptInputModelSelect
-      value={selectedModel?.id}
-      onValueChange={(modelId) => {
-        const model = chatModels.find(m => m.id === modelId);
-        if (model) {
-          setOptimisticModelId(model.id);
-          startTransition(() => {
-            saveChatModelAsCookie(model.id);
-          });
-        }
-      }}
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className={`text-xs h-7 px-3 rounded-full border transition-all duration-200 font-medium ${
+        isDeepThinking 
+          ? 'bg-blue-500 text-white border-blue-500 hover:bg-blue-600 shadow-md scale-105' 
+          : 'bg-background text-muted-foreground border-border hover:bg-accent hover:text-accent-foreground hover:border-accent-foreground/20'
+      }`}
+      onClick={() => onToggle(!isDeepThinking)}
+      title={t('chat.deepThinkingDescription')}
     >
-      <PromptInputModelSelectTrigger 
-        type="button"
-        className="text-xs focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:ring-0 data-[state=closed]:ring-0"
-      >
-        {selectedModel ? t(selectedModel.name) : t('chat.selectModel')}
-      </PromptInputModelSelectTrigger>
-      <PromptInputModelSelectContent>
-        {chatModels.map((model) => (
-          <SelectItem key={model.id} value={model.id}>
-            <div className="flex flex-col items-start gap-1 py-1">
-              <div className="font-medium">{t(model.name)}</div>
-              <div className="text-xs text-muted-foreground">{t(model.description)}</div>
-            </div>
-          </SelectItem>
-        ))}
-      </PromptInputModelSelectContent>
-    </PromptInputModelSelect>
+      <span className={`mr-1.5 transition-transform duration-200 ${isDeepThinking ? 'scale-110' : ''}`}>
+        🧠
+      </span>
+      {t('chat.deepThinking')}
+    </Button>
   );
 }
 
-const ModelSelectorCompact = memo(PureModelSelectorCompact);
+const DeepThinkingToggle = memo(PureDeepThinkingToggle);
 
 function PureStopButton({
   stop,

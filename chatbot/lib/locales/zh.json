@@ -44,6 +44,8 @@
     "hello": "你好！",
     "howCanIHelp": "今天我能为您做些什么？",
     "selectModel": "选择模型",
+    "deepThinking": "深度思考",
+    "deepThinkingDescription": "启用高级推理，显示逐步思考过程",
     "sendMessage": "发送消息",
     "typeMessage": "输入消息...",
     "thinking": "思考中...",
