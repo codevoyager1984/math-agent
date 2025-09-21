@@ -23,15 +23,42 @@ import { useRouter } from 'next/navigation';
 import { toast } from './toast';
 import { LoaderIcon } from './icons';
 import { guestRegex } from '@/lib/constants';
-import { LanguageSelector } from './language-selector';
 
 export function SidebarUserNav({ user }: { user: User }) {
   const router = useRouter();
   const { data, status } = useSession();
   const { setTheme, resolvedTheme } = useTheme();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const isGuest = guestRegex.test(data?.user?.email ?? '');
+
+  const toggleLanguage = () => {
+    const currentLang = i18n.language;
+    const newLang = currentLang === 'zh' ? 'en' : 'zh';
+    i18n.changeLanguage(newLang);
+  };
+
+  const toggleTheme = () => {
+    setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
+  };
+
+  const handleAuthAction = () => {
+    if (status === 'loading') {
+      toast({
+        type: 'error',
+        description: t('auth.checkingAuthStatus'),
+      });
+      return;
+    }
+
+    if (isGuest) {
+      router.push('/login');
+    } else {
+      signOut({
+        redirectTo: '/',
+      });
+    }
+  };
 
   return (
     <SidebarMenu>
@@ -72,45 +99,29 @@ export function SidebarUserNav({ user }: { user: User }) {
           <DropdownMenuContent
             data-testid="user-nav-menu"
             side="top"
-            className="w-[--radix-popper-anchor-width]"
+            className="w-[--radix-popper-anchor-width] !z-[9999] relative"
           >
             <DropdownMenuItem
               data-testid="user-nav-item-theme"
               className="cursor-pointer"
-              onSelect={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
+              onSelect={toggleTheme}
             >
               {resolvedTheme === 'light' ? t('theme.toggleDarkMode') : t('theme.toggleLightMode')}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <div className="px-2 py-1">
-              <LanguageSelector />
-            </div>
+            <DropdownMenuItem
+              className="cursor-pointer"
+              onSelect={toggleLanguage}
+            >
+              🌐 {t('common.language')}
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild data-testid="user-nav-item-auth">
-              <button
-                type="button"
-                className="w-full cursor-pointer"
-                onClick={() => {
-                  if (status === 'loading') {
-                    toast({
-                      type: 'error',
-                      description: t('auth.checkingAuthStatus'),
-                    });
-
-                    return;
-                  }
-
-                  if (isGuest) {
-                    router.push('/login');
-                  } else {
-                    signOut({
-                      redirectTo: '/',
-                    });
-                  }
-                }}
-              >
-                {isGuest ? t('auth.loginToAccount') : t('auth.signOut')}
-              </button>
+            <DropdownMenuItem
+              data-testid="user-nav-item-auth"
+              className="cursor-pointer"
+              onSelect={handleAuthAction}
+            >
+              {isGuest ? t('auth.loginToAccount') : t('auth.signOut')}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

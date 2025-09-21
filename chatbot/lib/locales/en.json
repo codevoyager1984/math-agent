@@ -21,7 +21,8 @@
     "paste": "Paste",
     "cut": "Cut",
     "undo": "Undo",
-    "redo": "Redo"
+    "redo": "Redo",
+    "language": "Language"
   },
   "auth": {
     "login": "Login",

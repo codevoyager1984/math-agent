@@ -21,7 +21,8 @@
     "paste": "粘贴",
     "cut": "剪切",
     "undo": "撤销",
-    "redo": "重做"
+    "redo": "重做",
+    "language": "语言"
   },
   "auth": {
     "login": "登录",
