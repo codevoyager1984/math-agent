@@ -1,7 +1,8 @@
 import axios, { AxiosRequestConfig } from 'axios';
 import { toast } from 'sonner';
 
-export const BASE_URL = `${process.env.NEXT_PUBLIC_API_URL}/api`;
+export const API_DOMAIN = process.env.NEXT_PUBLIC_API_URL || "https://math-rag-server.farmbot.me";
+export const BASE_URL = `${API_DOMAIN}/api`;
 
 export const getAccessToken = () => {
   const key = 'auth';
