@@ -882,6 +882,38 @@ class RAGService:
                 "error": str(e)
             }
     
+    async def get_all_knowledge_point_names(
+        self,
+        request_id: Optional[str] = None
+    ) -> List[str]:
+        """
+        获取所有知识点的标题名称（使用 Elasticsearch）
+
+        Args:
+            request_id: 请求ID用于追踪
+
+        Returns:
+            知识点标题列表
+        """
+        if not request_id:
+            request_id = str(uuid.uuid4())[:8]
+
+        try:
+            logger.info(f"[{request_id}] 获取所有知识点名称")
+            
+            # 直接使用 Elasticsearch 服务获取所有知识点名称
+            names = await self.elasticsearch_service.get_all_knowledge_point_names(
+                size=100,  # 最多返回100条
+                request_id=request_id
+            )
+            
+            logger.info(f"[{request_id}] 成功获取 {len(names)} 个知识点名称")
+            return names
+
+        except Exception as e:
+            logger.error(f"[{request_id}] 获取知识点名称失败: {e}")
+            raise
+
     async def clear_knowledge_base(self, request_id: Optional[str] = None) -> bool:
         """
         清空知识库（清空 ChromaDB 和 Elasticsearch）

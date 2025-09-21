@@ -491,6 +491,63 @@ class ElasticsearchService:
                 "error": str(e)
             }
 
+    async def get_all_knowledge_point_names(
+        self,
+        size: int = 100,
+        request_id: Optional[str] = None
+    ) -> List[str]:
+        """
+        获取所有知识点的标题名称
+        
+        Args:
+            size: 返回结果数量限制
+            request_id: 请求ID用于追踪
+            
+        Returns:
+            知识点标题列表
+        """
+        if not request_id:
+            request_id = str(uuid.uuid4())[:8]
+            
+        logger.info(f"[{request_id}] Getting all knowledge point names from Elasticsearch, limit: {size}")
+        
+        try:
+            es_client = self._get_es_client()
+            
+            # 构建查询 - 获取所有文档的title字段
+            search_body = {
+                "query": {"match_all": {}},
+                "size": size,
+                "_source": ["title"],  # 只返回title字段
+                "sort": [{"title.keyword": {"order": "asc"}}]  # 按标题排序
+            }
+            
+            # 执行搜索
+            response = await es_client.search(
+                index=self.index,
+                body=search_body
+            )
+            
+            # 提取标题并去重
+            titles = []
+            seen_titles = set()
+            
+            hits = response.get("hits", {}).get("hits", [])
+            for hit in hits:
+                source = hit.get("_source", {})
+                title = source.get("title")
+                
+                if title and title not in seen_titles:
+                    titles.append(title)
+                    seen_titles.add(title)
+            
+            logger.info(f"[{request_id}] Found {len(titles)} unique knowledge point names")
+            return titles
+            
+        except Exception as e:
+            logger.error(f"[{request_id}] Failed to get knowledge point names: {e}")
+            return []
+
     async def close(self):
         """关闭连接"""
         try:

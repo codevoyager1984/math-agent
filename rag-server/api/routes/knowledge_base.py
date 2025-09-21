@@ -206,53 +206,28 @@ async def get_collection_info():
     "/names",
     response_model=KnowledgePointNamesResponse,
     summary="获取所有知识点名称",
-    description="获取知识库中所有知识点的名称列表，用于改善搜索质量"
+    description="获取知识库中所有知识点的名称列表，用于改善搜索质量，使用 Elasticsearch 查询"
 )
-async def get_knowledge_point_names(
-    category: Optional[str] = Query(None, description="分类筛选")
-):
+async def get_knowledge_point_names():
     """
     获取所有知识点名称
 
-    - **category**: 可选的分类筛选
+    使用 Elasticsearch 查询，不支持分类筛选，最多返回 100 条记录
     """
     try:
         # 生成请求ID用于追踪
         request_id = str(uuid.uuid4())[:8]
-        logger.info(f"[{request_id}] Getting knowledge point names, category: {category or 'all'}")
+        logger.info(f"[{request_id}] Getting all knowledge point names using Elasticsearch")
 
-        # 查询所有文档，获取足够多的结果
-        response = await rag_service.query_documents(
-            query="数学知识点",  # 使用通用查询词获取所有知识点
-            n_results=100,  # 获取较多结果
-            include_metadata=True
-        )
+        # 使用 RAG 服务的新方法直接从 Elasticsearch 获取所有知识点名称
+        names = await rag_service.get_all_knowledge_point_names(request_id=request_id)
 
-        # 提取知识点名称
-        names = []
-        seen_names = set()  # 防重复
-
-        for doc in response.results:
-            if doc.metadata:
-                # 分类筛选
-                if category and doc.metadata.get("category") != category:
-                    continue
-
-                # 提取标题
-                title = doc.metadata.get("title")
-                if title and title not in seen_names:
-                    names.append(title)
-                    seen_names.add(title)
-
-        # 按字母顺序排序
-        names.sort()
-
-        logger.info(f"[{request_id}] Found {len(names)} unique knowledge point names")
+        logger.info(f"[{request_id}] Found {len(names)} knowledge point names")
 
         return KnowledgePointNamesResponse(
             names=names,
             count=len(names),
-            category=category
+            category=None  # 不再支持分类筛选
         )
 
     except Exception as e:
