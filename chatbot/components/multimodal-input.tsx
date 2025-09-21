@@ -299,7 +299,7 @@ function PureMultimodalInput({
     } catch (error) {
       toast.error(t('errors.uploadFailed'));
     }
-  }, [t]);
+  }, [t, performOCR]);
 
   const handleFiles = useCallback(
     async (files: File[]) => {
