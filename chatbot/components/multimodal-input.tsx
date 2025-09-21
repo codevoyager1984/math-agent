@@ -267,7 +267,7 @@ function PureMultimodalInput({
     }
   };
 
-  const uploadFile = async (file: File) => {
+  const uploadFile = useCallback(async (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
 
@@ -299,7 +299,7 @@ function PureMultimodalInput({
     } catch (error) {
       toast.error(t('errors.uploadFailed'));
     }
-  };
+  }, [t]);
 
   const handleFiles = useCallback(
     async (files: File[]) => {
@@ -322,7 +322,7 @@ function PureMultimodalInput({
         setUploadQueue([]);
       }
     },
-    [setAttachments],
+    [setAttachments, uploadFile],
   );
 
   const handleFileChange = useCallback(
@@ -349,7 +349,7 @@ function PureMultimodalInput({
         await handleFiles(files);
       }
     },
-    [handleFiles],
+    [handleFiles, t],
   );
 
   const { isAtBottom, scrollToBottom } = useScrollToBottom();

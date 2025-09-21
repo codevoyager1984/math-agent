@@ -58,7 +58,7 @@ export const KnowledgeSearchInput = memo(function KnowledgeSearchInput({
                 查询关键词
               </div>
               <div className="text-sm text-blue-700 dark:text-blue-300 mt-1 font-mono bg-blue-100 dark:bg-blue-900/30 px-2 py-1 rounded">
-                "{input.query}"
+                &quot;{input.query}&quot;
               </div>
             </div>
           </div>

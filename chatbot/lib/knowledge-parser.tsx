@@ -54,9 +54,7 @@ export function renderTextWithKnowledgeTags(text: string): React.ReactNode {
         key={`knowledge-${tag.id}-${index}`}
         knowledgeId={tag.id}
         displayText={tag.displayText}
-      >
-        {tag.displayText}
-      </KnowledgeTooltip>
+      />
     );
 
     lastIndex = tag.endIndex;

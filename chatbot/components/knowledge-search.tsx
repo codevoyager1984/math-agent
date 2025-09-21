@@ -61,7 +61,7 @@ export const KnowledgeSearch = memo(function KnowledgeSearch({
       >
         <LoaderIcon className="size-4 animate-spin text-blue-600" />
         <span className="text-sm text-blue-700 dark:text-blue-300">
-          正在搜索相关知识点: "{query}"...
+          正在搜索相关知识点: &quot;{query}&quot;...
         </span>
       </motion.div>
     );
@@ -77,7 +77,7 @@ export const KnowledgeSearch = memo(function KnowledgeSearch({
         <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
           <SearchIcon className="size-4" />
           <span className="text-sm">
-            未找到与 "{query}" 相关的知识点
+            未找到与 &quot;{query}&quot; 相关的知识点
           </span>
         </div>
       </motion.div>
