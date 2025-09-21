@@ -3,6 +3,7 @@
 负责文本到向量的转换
 """
 import asyncio
+import os
 from typing import List, Union
 from sentence_transformers import SentenceTransformer
 from loguru import logger
@@ -20,6 +21,9 @@ class EmbeddingService:
         self.model_name = model_name
         self._model = None
         self._lock = asyncio.Lock()
+        
+        # 配置模型缓存路径
+        self.cache_folder = os.getenv('SENTENCE_TRANSFORMERS_HOME', '/app/model_cache')
     
     async def _initialize_model(self):
         """异步初始化模型"""
@@ -27,11 +31,15 @@ class EmbeddingService:
             async with self._lock:
                 if self._model is None:  # 双重检查
                     logger.info(f"正在加载嵌入模型: {self.model_name}")
+                    logger.info(f"使用缓存目录: {self.cache_folder}")
                     # 在线程池中加载模型以避免阻塞
                     loop = asyncio.get_event_loop()
                     self._model = await loop.run_in_executor(
                         None, 
-                        lambda: SentenceTransformer(self.model_name)
+                        lambda: SentenceTransformer(
+                            self.model_name, 
+                            cache_folder=self.cache_folder
+                        )
                     )
                     logger.info("嵌入模型加载完成")
     
@@ -107,7 +115,8 @@ class EmbeddingService:
         """获取模型信息"""
         return {
             "model_name": self.model_name,
-            "is_loaded": self._model is not None
+            "is_loaded": self._model is not None,
+            "cache_folder": self.cache_folder
         }
 
 
