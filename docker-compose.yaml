@@ -6,7 +6,7 @@ services:
     image: chromadb/chroma:latest
     container_name: math-agent-chromadb
     ports:
-      - "18000:8000"  # 映射到本地 18000 端口
+      - "8000:8000"
     volumes:
       - chroma-data:/chroma/chroma  # 使用命名卷持久化存储
     environment:
@@ -73,27 +73,94 @@ services:
     networks:
       - math-agent-network
 
-  # Kibana 可视化界面 (可选)
-  kibana:
-    image: kibana:8.11.0
-    container_name: math-agent-kibana
+  # PostgreSQL 数据库
+  postgres:
+    image: postgres:15-alpine
+    container_name: math-agent-postgres
     ports:
-      - "5601:5601"
+      - "5432:5432"
     volumes:
-      - ./docker/config/kibana.yml:/usr/share/kibana/config/kibana.yml:ro
+      - postgres-data:/var/lib/postgresql/data
     environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-      - SERVER_NAME=math-agent-kibana
-      - SERVER_HOST=0.0.0.0
-    depends_on:
-      elasticsearch:
-        condition: service_healthy
+      - POSTGRES_DB=math-agent
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=v14yZNQNwdPq2sna8rFneENI
+      - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:5601/api/status || exit 1"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - math-agent-network
+
+  # 聊天机器人前端
+  chatbot:
+    build:
+      context: ./chatbot
+      dockerfile: Dockerfile
+    container_name: math-agent-chatbot
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.chatbot
+    depends_on:
+      - postgres
+      - rag-server
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 10s
-      retries: 5
+      retries: 3
+      start_period: 60s
+    networks:
+      - math-agent-network
+
+  # 管理面板
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: math-agent-dashboard
+    ports:
+      - "3001:3000"
+    env_file:
+      - .env.dashboard
+    depends_on:
+      - postgres
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - math-agent-network
+
+  # RAG 服务器
+  rag-server:
+    build:
+      context: ./rag-server
+      dockerfile: Dockerfile
+    container_name: math-agent-rag-server
+    ports:
+      - "8080:8000"
+    env_file:
+      - .env.rag-server
+    depends_on:
+      - postgres
+      - chromadb
+      - elasticsearch
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
       start_period: 60s
     networks:
       - math-agent-network
@@ -107,4 +174,6 @@ volumes:
   chroma-data:
     driver: local
   elasticsearch-data:
+    driver: local
+  postgres-data:
     driver: local

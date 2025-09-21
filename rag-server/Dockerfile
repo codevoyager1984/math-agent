@@ -1,0 +1,19 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+
+RUN pip install --no-cache-dir --timeout 1000 -r requirements.txt && \
+    rm -rf /root/.cache/pip && \
+    find /usr/local/lib/python3.12/site-packages -name "*.pyc" -delete
+
+COPY entrypoint.sh .
+RUN chmod +x entrypoint.sh
+
+# 复制应用代码
+COPY . .
+
+EXPOSE 8000
+
+ENTRYPOINT ["./entrypoint.sh"]

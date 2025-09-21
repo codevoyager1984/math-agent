@@ -209,3 +209,7 @@ pyrightconfig.json
 
 
 chroma-data/
+
+.env.chatbot
+.env.dashboard
+.env.rag-server
