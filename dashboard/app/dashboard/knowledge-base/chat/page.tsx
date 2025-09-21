@@ -1,14 +1,14 @@
 'use client';
 
 import { useSearchParams, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import DocumentChatPage from '@/components/knowledge-base/DocumentChatPage';
 import { DocumentInput } from '@/api/knowledge';
 import KnowledgePointPreview from '@/components/knowledge-base/KnowledgePointPreview';
 import { Button, Modal, ScrollArea, Text, Group, ActionIcon, Tooltip } from '@mantine/core';
 import { IconEye, IconEyeOff, IconFileText } from '@tabler/icons-react';
 
-export default function ChatPage() {
+function ChatPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [showPreview, setShowPreview] = useState(false);
@@ -136,5 +136,13 @@ export default function ChatPage() {
         </ScrollArea>
       </Modal>
     </>
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ChatPageContent />
+    </Suspense>
   );
 }

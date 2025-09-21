@@ -1,7 +1,7 @@
 'use client';
 
 import { useSearchParams, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import {
   Container,
   Stack,
@@ -32,7 +32,7 @@ import {
 import { toast } from 'sonner';
 import { parseDocumentAndCreateSession } from '@/api/knowledge';
 
-export default function UploadPage() {
+function UploadPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   
@@ -225,5 +225,13 @@ export default function UploadPage() {
         </Paper>
       </Stack>
     </Container>
+  );
+}
+
+export default function UploadPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <UploadPageContent />
+    </Suspense>
   );
 }

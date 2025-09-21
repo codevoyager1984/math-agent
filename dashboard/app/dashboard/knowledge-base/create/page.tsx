@@ -18,14 +18,14 @@ import { IconArrowLeft, IconPlus, IconTrash } from '@tabler/icons-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import PageHeader from '@/components/PageHeader/PageHeader';
-import { addDocument, KnowledgePointInput, Example } from '@/api/knowledge';
+import { addDocument, DocumentInput, Example } from '@/api/knowledge';
 import { CATEGORY_OPTIONS } from '@/constants/categories';
 
 export default function CreateKnowledgePointPage() {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   
-  const [form, setForm] = useState<KnowledgePointInput>({
+  const [form, setForm] = useState<DocumentInput>({
     title: '',
     description: '',
     category: 'general',

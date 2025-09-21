@@ -16,14 +16,14 @@ import {
   Paper,
 } from '@mantine/core';
 import { IconPlus, IconTrash, IconGripVertical } from '@tabler/icons-react';
-import { KnowledgePointInput, Example } from '@/api/knowledge';
+import { DocumentInput, Example } from '@/api/knowledge';
 import { CATEGORY_OPTIONS } from '@/constants/categories';
 
 interface EditableKnowledgePointCardProps {
-  knowledgePoint: KnowledgePointInput;
+  knowledgePoint: DocumentInput;
   index: number;
   selected: boolean;
-  onUpdate: (index: number, updatedKnowledgePoint: KnowledgePointInput) => void;
+  onUpdate: (index: number, updatedKnowledgePoint: DocumentInput) => void;
   onToggleSelect: (index: number) => void;
   onDelete: (index: number) => void;
 }
@@ -43,14 +43,14 @@ export default function EditableKnowledgePointCard({
   onToggleSelect,
   onDelete,
 }: EditableKnowledgePointCardProps) {
-  const [localKnowledgePoint, setLocalKnowledgePoint] = useState<KnowledgePointInput>(knowledgePoint);
+  const [localKnowledgePoint, setLocalKnowledgePoint] = useState<DocumentInput>(knowledgePoint);
 
   // 同步父组件传入的知识点数据
   useEffect(() => {
     setLocalKnowledgePoint(knowledgePoint);
   }, [knowledgePoint]);
 
-  const handleFieldChange = (field: keyof KnowledgePointInput, value: any) => {
+  const handleFieldChange = (field: keyof DocumentInput, value: any) => {
     const updated = { ...localKnowledgePoint, [field]: value };
     setLocalKnowledgePoint(updated);
     onUpdate(index, updated);
