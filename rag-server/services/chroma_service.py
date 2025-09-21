@@ -12,7 +12,7 @@ from loguru import logger
 class ChromaDBService:
     """ChromaDB 服务类"""
     
-    def __init__(self, host: str = "localhost", port: int = 18000):
+    def __init__(self, host: str, port: int):
         """
         初始化 ChromaDB 服务
         
@@ -359,4 +359,5 @@ class ChromaDBService:
 
 
 # 全局 ChromaDB 服务实例
-chroma_service = ChromaDBService()
+from config import settings
+chroma_service = ChromaDBService(host=settings.CHROMA_HOST, port=settings.CHROMA_PORT)
