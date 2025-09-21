@@ -25,7 +25,6 @@ RUN \
 
 # 构建阶段
 FROM base AS builder
-ENV NODE_OPTIONS="--max-old-space-size=4096"
 WORKDIR /app
 
 # 在 builder 阶段也启用 corepack
