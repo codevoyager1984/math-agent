@@ -1,7 +1,7 @@
 import axios, { AxiosRequestConfig } from 'axios';
 import { toast } from 'sonner';
 
-export const BASE_URL = '/api';
+export const BASE_URL = `${process.env.NEXT_PUBLIC_API_URL}/api`;
 
 export const getAccessToken = () => {
   const key = 'auth';

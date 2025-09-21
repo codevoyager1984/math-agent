@@ -4,7 +4,7 @@
  */
 
 // RAG Server URL configuration
-export const RAG_SERVER_URL = process.env.RAG_SERVER_URL || 'http://45.78.228.239:18080';
+export const RAG_SERVER_URL = process.env.NEXT_PUBLIC_API_URL || 'http://45.78.228.239:18080';
 
 // API endpoints
 export const API_ENDPOINTS = {
