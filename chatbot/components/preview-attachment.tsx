@@ -199,16 +199,30 @@ export const PreviewAttachment = ({
           </div>
           
           {showOcrPreview ? (
-            <div className="text-xs bg-muted rounded p-2 max-h-32 overflow-y-auto">
-              <Response className="text-xs">{ocrText}</Response>
+            <div className="text-xs bg-muted rounded p-2 relative">
+              <div className="max-h-32 overflow-y-auto">
+                <Response key={`expanded-${ocrText?.slice(0, 20)}`} className="text-xs">{ocrText}</Response>
+              </div>
             </div>
           ) : (
-            <div className="text-xs bg-muted rounded p-2 h-12 overflow-hidden relative">
-              <div className="line-clamp-2 text-xs leading-4">
-                <Response className="text-xs [&>*]:text-xs [&>*]:leading-4">{ocrText}</Response>
+            <div className="text-xs bg-muted rounded p-2 relative h-16">
+              <div className="h-12 overflow-hidden">
+                <div className="text-xs leading-4 h-12">
+                  {/* Use plain text in collapsed view to avoid complex rendering issues */}
+                  <div className="line-clamp-3" style={{ 
+                    display: '-webkit-box',
+                    WebkitLineClamp: 3,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    lineHeight: '16px',
+                    maxHeight: '48px'
+                  }}>
+                    {ocrText}
+                  </div>
+                </div>
               </div>
               {/* Fade out gradient at the bottom */}
-              <div className="absolute bottom-0 left-0 right-0 h-3 bg-gradient-to-t from-muted to-transparent pointer-events-none"></div>
+              <div className="absolute bottom-2 left-2 right-2 h-3 bg-gradient-to-t from-muted to-transparent pointer-events-none"></div>
             </div>
           )}
         </div>
