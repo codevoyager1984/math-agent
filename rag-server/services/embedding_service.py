@@ -31,16 +31,27 @@ class EmbeddingService:
             async with self._lock:
                 if self._model is None:  # 双重检查
                     logger.info(f"正在加载嵌入模型: {self.model_name}")
-                    logger.info(f"使用缓存目录: {self.cache_folder}")
-                    # 在线程池中加载模型以避免阻塞
-                    loop = asyncio.get_event_loop()
-                    self._model = await loop.run_in_executor(
-                        None, 
-                        lambda: SentenceTransformer(
-                            self.model_name, 
-                            cache_folder=self.cache_folder
+                    
+                    # 检查缓存目录是否存在
+                    if os.path.exists(self.cache_folder):
+                        logger.info(f"使用缓存目录: {self.cache_folder}")
+                        # 在线程池中加载模型以避免阻塞
+                        loop = asyncio.get_event_loop()
+                        self._model = await loop.run_in_executor(
+                            None, 
+                            lambda: SentenceTransformer(
+                                self.model_name, 
+                                cache_folder=self.cache_folder
+                            )
                         )
-                    )
+                    else:
+                        logger.warning(f"缓存目录不存在: {self.cache_folder}，将使用默认路径加载模型")
+                        # 不使用本地缓存路径，使用默认路径
+                        loop = asyncio.get_event_loop()
+                        self._model = await loop.run_in_executor(
+                            None, 
+                            lambda: SentenceTransformer(self.model_name)
+                        )
                     logger.info("嵌入模型加载完成")
     
     async def encode(self, texts: Union[str, List[str]]) -> Union[List[float], List[List[float]]]:

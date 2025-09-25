@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import React, { memo, useMemo, useEffect, useState, useRef } from 'react';
+import React, { memo, useMemo, useEffect, useState, useRef, isValidElement, cloneElement } from 'react';
 import { useChunkedContent } from '@/lib/chunk-renderer';
 
 interface OptimizedResponseProps {
@@ -33,6 +33,45 @@ const LazyMarkdownRenderer = memo(({ content }: { content: string }) => {
         const { renderTextWithKnowledgeTags } = await import('@/lib/knowledge-parser');
         const { preprocessContent } = await import('@/lib/latex-processor');
 
+        // 处理markdown子节点中的知识点标记
+        const processMarkdownChildren = (children: React.ReactNode): React.ReactNode => {
+          if (typeof children === 'string') {
+            return renderTextWithKnowledgeTags(children);
+          }
+
+          if (Array.isArray(children)) {
+            return children.map((child, index) => {
+              if (typeof child === 'string') {
+                return <span key={index}>{renderTextWithKnowledgeTags(child)}</span>;
+              }
+              // 递归处理React元素的children
+              if (isValidElement(child)) {
+                const element = child as React.ReactElement<any>;
+                if (element.props && element.props.children) {
+                  return cloneElement(element, {
+                    ...element.props,
+                    children: processMarkdownChildren(element.props.children)
+                  });
+                }
+              }
+              return child;
+            });
+          }
+
+          // 处理单个React元素
+          if (isValidElement(children)) {
+            const element = children as React.ReactElement<any>;
+            if (element.props && element.props.children) {
+              return cloneElement(element, {
+                ...element.props,
+                children: processMarkdownChildren(element.props.children)
+              });
+            }
+          }
+
+          return children;
+        };
+
         const MarkdownWithMath = memo(({ children: markdownContent }: { children: string }) => {
           const { processedContent } = useMemo(() => {
             return preprocessContent(markdownContent);
@@ -55,7 +94,7 @@ const LazyMarkdownRenderer = memo(({ content }: { content: string }) => {
               skipHtml={false}
               components={{
                 p: ({ children }) => {
-                  return <p className="mb-0 mt-0 whitespace-pre-wrap leading-relaxed">{children}</p>;
+                  return <p className="mb-0 mt-0 whitespace-pre-wrap leading-relaxed">{processMarkdownChildren(children)}</p>;
                 },
                 ol: ({ children, ...props }) => {
                   return <ol className="list-decimal list-outside ml-6 space-y-4" {...props}>{children}</ol>;
@@ -64,7 +103,33 @@ const LazyMarkdownRenderer = memo(({ content }: { content: string }) => {
                   return <ul className="list-disc list-outside ml-6 space-y-2" {...props}>{children}</ul>;
                 },
                 li: ({ children }) => {
-                  return <li className="mb-4 leading-relaxed">{children}</li>;
+                  return <li className="mb-4 leading-relaxed">{processMarkdownChildren(children)}</li>;
+                },
+                // 处理标题中的知识点标记
+                h1: ({ children }) => {
+                  return <h1 className="mb-4">{processMarkdownChildren(children)}</h1>;
+                },
+                h2: ({ children }) => {
+                  return <h2 className="mb-3">{processMarkdownChildren(children)}</h2>;
+                },
+                h3: ({ children }) => {
+                  return <h3 className="mb-2">{processMarkdownChildren(children)}</h3>;
+                },
+                h4: ({ children }) => {
+                  return <h4 className="mb-2">{processMarkdownChildren(children)}</h4>;
+                },
+                h5: ({ children }) => {
+                  return <h5 className="mb-2">{processMarkdownChildren(children)}</h5>;
+                },
+                h6: ({ children }) => {
+                  return <h6 className="mb-2">{processMarkdownChildren(children)}</h6>;
+                },
+                // 处理强调文本中的知识点标记
+                strong: ({ children }) => {
+                  return <strong>{processMarkdownChildren(children)}</strong>;
+                },
+                em: ({ children }) => {
+                  return <em>{processMarkdownChildren(children)}</em>;
                 },
                 br: () => {
                   return <br className="my-1" />;
