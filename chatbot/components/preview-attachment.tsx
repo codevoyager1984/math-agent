@@ -14,12 +14,14 @@ export const PreviewAttachment = ({
   onRemove,
   onEdit,
   onOcrTextChange,
+  inMessage = false,
 }: {
   attachment: Attachment;
   isUploading?: boolean;
   onRemove?: () => void;
   onEdit?: () => void;
   onOcrTextChange?: (newText: string) => void;
+  inMessage?: boolean;
 }) => {
   const { name, url, contentType, ocrText, ocrLoading } = attachment;
 
@@ -146,6 +148,10 @@ export const PreviewAttachment = ({
 
         <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent text-white text-[10px] px-1 py-0.5 truncate">
           {(() => {
+            if (inMessage) {
+              return '图像预览';
+            }
+
             if (isUploading) {
               return '上传中...';
             }

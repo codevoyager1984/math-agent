@@ -109,6 +109,8 @@ const PurePreviewMessage = ({
                       contentType: attachment.mediaType,
                       url: attachment.url,
                     }}
+                    isUploading={false}
+                    inMessage={true}
                   />
                 ))}
               </div>
