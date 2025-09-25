@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { memo, useMemo } from 'react';
+import React, { memo, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -19,16 +19,37 @@ const processMarkdownChildren = (children: React.ReactNode): React.ReactNode => 
   if (typeof children === 'string') {
     return renderTextWithKnowledgeTags(children);
   }
-  
+
   if (Array.isArray(children)) {
     return children.map((child, index) => {
       if (typeof child === 'string') {
         return <span key={index}>{renderTextWithKnowledgeTags(child)}</span>;
       }
+      // 递归处理React元素的children
+      if (React.isValidElement(child)) {
+        const element = child as React.ReactElement<any>;
+        if (element.props && element.props.children) {
+          return React.cloneElement(element, {
+            ...element.props,
+            children: processMarkdownChildren(element.props.children)
+          });
+        }
+      }
       return child;
     });
   }
-  
+
+  // 处理单个React元素
+  if (React.isValidElement(children)) {
+    const element = children as React.ReactElement<any>;
+    if (element.props && element.props.children) {
+      return React.cloneElement(element, {
+        ...element.props,
+        children: processMarkdownChildren(element.props.children)
+      });
+    }
+  }
+
   return children;
 };
 

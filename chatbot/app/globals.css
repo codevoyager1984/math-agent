@@ -56,6 +56,31 @@ p:has(+ .katex-display) {
   margin: 2em 0 !important;
 }
 
+/* Markdown heading styles */
+.size-full h1 {
+  @apply text-lg font-bold mt-4 mb-2 text-foreground;
+}
+
+.size-full h2 {
+  @apply text-base font-semibold mt-3 mb-1 text-foreground;
+}
+
+.size-full h3 {
+  @apply text-sm font-semibold mt-3 mb-1 text-foreground;
+}
+
+.size-full h4 {
+  @apply text-sm font-medium mt-2 mb-1 text-foreground;
+}
+
+.size-full h5 {
+  @apply text-xs font-medium mt-2 mb-1 text-foreground;
+}
+
+.size-full h6 {
+  @apply text-xs font-medium mt-1 mb-1 text-foreground;
+}
+
 /* Allow horizontal scroll on mobile for long formulas */
 @media (max-width: 640px) {
   .katex-display {
