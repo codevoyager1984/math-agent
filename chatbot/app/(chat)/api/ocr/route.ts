@@ -61,10 +61,7 @@ export async function POST(request: Request) {
     }
 
     // Fetch image and convert to base64
-    console.log(`🚀 正在获取并编码图片: ${imageUrl}`);
-    const { base64, mimeType } = await fetchImageAsBase64(imageUrl);
-    console.log(`✅ 图片编码完成，MIME类型: ${mimeType}, Base64长度: ${base64.length}`);
-
+    console.log(`🚀 正在识别图片文字: ${imageUrl}`);
     // Prepare the request to OpenRouter API with base64 encoded image
     const ocrPayload = {
       model: "doubao-seed-1-6-vision-250815",
@@ -80,21 +77,16 @@ export async function POST(request: Request) {
             },
             {
               type: "text",
-              text: "请识别下图片里面的主体内容，请直接返回完整的内容，不需要做过多解释。有换行的地方注意需要换行。"
+              text: "请识别下图片里面的主体内容，请直接返回完整的内容，不需要做过多解释，不要修改文字内容，注意里面的公式需要使用 latex 格式。有换行的地方注意需要换行。"
             },
           ]
         }
       ],
-      max_tokens: 2000,
       temperature: 0.1,
       thinking: {
-        type: "enabled"
+        type: "disabled"
       }
     };
-
-    console.log(`🚀 正在使用 Doubao Vision 模型识别图片文字...`);
-    console.log('⏳ 请稍等...');
-    
     const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
       method: 'POST',
       headers: {
