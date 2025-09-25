@@ -32,6 +32,7 @@ import { useDataStream } from './data-stream-provider';
 import { KnowledgeSearch } from './knowledge-search';
 import { KnowledgeSearchInput } from './knowledge-search-input';
 import { useTranslation } from 'react-i18next';
+import { formatRelativeTime, formatDetailedTime } from '@/lib/timestamp-utils';
 
 // Type narrowing is handled by TypeScript's control flow analysis
 // The AI SDK provides proper discriminated unions for tool calls
@@ -352,13 +353,47 @@ const PurePreviewMessage = ({
             })}
 
             {!isReadonly && (
-              <MessageActions
-                key={`action-${message.id}`}
-                chatId={chatId}
-                message={message}
-                vote={vote}
-                isLoading={isLoading}
-              />
+              <div className="flex items-center gap-2">
+                <MessageActions
+                  key={`action-${message.id}`}
+                  chatId={chatId}
+                  message={message}
+                  vote={vote}
+                  isLoading={isLoading}
+                />
+                
+                {/* Timestamp display for bot messages */}
+                {message.role === 'assistant' && message.metadata?.createdAt && (
+                  <div className="text-xs text-muted-foreground">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="cursor-help">
+                          {formatRelativeTime(message.metadata.createdAt)}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {formatDetailedTime(message.metadata.createdAt)}
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Timestamp display for user messages */}
+            {message.role === 'user' && message.metadata?.createdAt && (
+              <div className="text-xs text-muted-foreground mt-2 text-right">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-help">
+                      {formatRelativeTime(message.metadata.createdAt)}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {formatDetailedTime(message.metadata.createdAt)}
+                  </TooltipContent>
+                </Tooltip>
+              </div>
             )}
           </div>
         </div>
