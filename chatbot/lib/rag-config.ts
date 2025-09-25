@@ -8,7 +8,7 @@
  */
 export function getRagServerUrl(): string {
   console.log("getRagServerUrl", process.env.NEXT_PUBLIC_RAG_SERVER_URL);
-  return process.env.NEXT_PUBLIC_RAG_SERVER_URL || "http://localhost:8000";
+  return process.env.NEXT_PUBLIC_RAG_SERVER_URL || "https://math-rag-server.farmbot.me";
 }
 
 /**
