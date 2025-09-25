@@ -249,7 +249,7 @@ export const PreviewAttachment = ({
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
               transition={{ type: "spring", damping: 20, stiffness: 300 }}
-              className="relative w-full max-w-2xl bg-white dark:bg-gray-900 rounded-lg overflow-hidden shadow-2xl m-4"
+              className="relative w-full max-w-2xl max-h-[90vh] bg-white dark:bg-gray-900 rounded-lg overflow-hidden shadow-2xl m-4 flex flex-col"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
@@ -301,17 +301,17 @@ export const PreviewAttachment = ({
               </div>
 
               {/* Content */}
-              <div className="p-4 min-h-[300px]">
+              <div className="flex-1 overflow-hidden flex flex-col p-4">
                 {editPreviewMode === 'edit' ? (
                   <Textarea
                     value={editedOcrText}
                     onChange={(e) => setEditedOcrText(e.target.value)}
                     placeholder="请输入文本内容...支持Markdown和LaTeX格式，例如：$x^2 + y^2 = z^2$"
-                    className="min-h-[250px] resize-none"
+                    className="flex-1 min-h-[200px] max-h-none resize-none"
                     autoFocus
                   />
                 ) : (
-                  <div className="min-h-[250px] border rounded p-3 bg-background overflow-y-auto">
+                  <div className="flex-1 border rounded p-3 bg-background overflow-y-auto min-h-[200px]">
                     {editedOcrText.trim() ? (
                       <Response>{editedOcrText}</Response>
                     ) : (
@@ -324,7 +324,7 @@ export const PreviewAttachment = ({
               </div>
 
               {/* Footer */}
-              <div className="flex items-center justify-end gap-2 p-4 border-t dark:border-gray-700">
+              <div className="flex-shrink-0 flex items-center justify-end gap-2 p-4 border-t dark:border-gray-700">
                 <Button
                   type="button"
                   variant="outline"

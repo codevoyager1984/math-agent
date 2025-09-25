@@ -65,9 +65,16 @@ export const Response = memo(
         className={cn(
           'size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0',
           // 添加数学公式间距样式
-          '[&_.katex]:mx-2',
-          '[&_.katex-display]:my-6',
-          '[&_p:has(.katex)]:my-4',
+          '[&_.katex]:mx-1',
+          '[&_.katex-display]:my-4',
+          '[&_p:has(.katex)]:my-2',
+          // 列表样式优化
+          '[&_ol]:mb-4',
+          '[&_ul]:mb-4',
+          '[&_li]:mb-3',
+          '[&_li_p]:mb-1',
+          // 确保列表项内的段落有适当间距
+          '[&_li>p:last-child]:mb-0',
           className,
         )}
       >
@@ -84,33 +91,42 @@ export const Response = memo(
               strict: false
             }]
           ]}
+          skipHtml={false}
           components={{
             // 处理段落中的知识点标记
             p: ({ children }) => {
-              return <p>{processMarkdownChildren(children)}</p>;
+              return <p className="mb-2 whitespace-pre-wrap">{processMarkdownChildren(children)}</p>;
+            },
+            // 处理有序列表
+            ol: ({ children, ...props }) => {
+              return <ol className="list-decimal list-outside ml-6 space-y-4" {...props}>{children}</ol>;
+            },
+            // 处理无序列表
+            ul: ({ children, ...props }) => {
+              return <ul className="list-disc list-outside ml-6 space-y-2" {...props}>{children}</ul>;
             },
             // 处理列表项中的知识点标记
             li: ({ children }) => {
-              return <li>{processMarkdownChildren(children)}</li>;
+              return <li className="mb-4 leading-relaxed">{processMarkdownChildren(children)}</li>;
             },
             // 处理标题中的知识点标记
             h1: ({ children }) => {
-              return <h1>{processMarkdownChildren(children)}</h1>;
+              return <h1 className="mb-4">{processMarkdownChildren(children)}</h1>;
             },
             h2: ({ children }) => {
-              return <h2>{processMarkdownChildren(children)}</h2>;
+              return <h2 className="mb-3">{processMarkdownChildren(children)}</h2>;
             },
             h3: ({ children }) => {
-              return <h3>{processMarkdownChildren(children)}</h3>;
+              return <h3 className="mb-2">{processMarkdownChildren(children)}</h3>;
             },
             h4: ({ children }) => {
-              return <h4>{processMarkdownChildren(children)}</h4>;
+              return <h4 className="mb-2">{processMarkdownChildren(children)}</h4>;
             },
             h5: ({ children }) => {
-              return <h5>{processMarkdownChildren(children)}</h5>;
+              return <h5 className="mb-2">{processMarkdownChildren(children)}</h5>;
             },
             h6: ({ children }) => {
-              return <h6>{processMarkdownChildren(children)}</h6>;
+              return <h6 className="mb-2">{processMarkdownChildren(children)}</h6>;
             },
             // 处理强调文本中的知识点标记
             strong: ({ children }) => {
@@ -118,6 +134,10 @@ export const Response = memo(
             },
             em: ({ children }) => {
               return <em>{processMarkdownChildren(children)}</em>;
+            },
+            // 处理换行
+            br: () => {
+              return <br className="my-1" />;
             },
           }}
         >

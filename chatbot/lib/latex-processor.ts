@@ -25,7 +25,13 @@ export function preprocessLatex(content: string): string {
     .replace(/\\\)/g, '$')
     // 确保块级公式前后有换行
     .replace(/([^\n])\$\$/g, '$1\n$$')
-    .replace(/\$\$([^\n])/g, '$$\n$1');
+    .replace(/\$\$([^\n])/g, '$$\n$1')
+    // 处理答案选项格式 - 确保选择题选项前有换行
+    .replace(/([^\n\s])\s*([ABCD]\.\s*)/g, '$1\n$2')
+    // 处理连续的选择题选项，确保它们之间有换行
+    .replace(/([ABCD]\.\s*[^\n]*?)\s+([ABCD]\.\s*)/g, '$1\n$2')
+    // 额外处理：确保选项和前面的内容之间有换行
+    .replace(/([，。！？])\s*([ABCD]\.\s*)/g, '$1\n$2');
 }
 
 /**
