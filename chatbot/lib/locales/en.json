@@ -111,6 +111,7 @@
     "privateDescription": "Only you can access this chat"
   },
   "errors": {
+    "error": "Error",
     "genericError": "Something went wrong. Please try again.",
     "networkError": "Network error. Please check your connection.",
     "authError": "Authentication error. Please log in again.",

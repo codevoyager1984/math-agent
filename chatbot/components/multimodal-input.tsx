@@ -532,7 +532,7 @@ function PureMultimodalInput({
           ) : (
             <PromptInputSubmit
               status={status}
-              disabled={!input.trim() || uploadQueue.length > 0 || ocrInProgress || hasOcrInProgress()}
+              disabled={(!input.trim() && attachments.length === 0) || uploadQueue.length > 0 || ocrInProgress || hasOcrInProgress()}
               className="bg-primary hover:bg-primary/90 text-primary-foreground size-8"
               size="sm"
             />
@@ -650,10 +650,12 @@ function PureSendButton({
   submitForm,
   input,
   uploadQueue,
+  attachments,
 }: {
   submitForm: () => void;
   input: string;
   uploadQueue: Array<string>;
+  attachments: Array<Attachment>;
 }) {
   return (
     <Button
@@ -663,7 +665,7 @@ function PureSendButton({
         event.preventDefault();
         submitForm();
       }}
-      disabled={input.length === 0 || uploadQueue.length > 0}
+      disabled={(input.length === 0 && attachments.length === 0) || uploadQueue.length > 0}
     >
       <ArrowUpIcon size={14} />
     </Button>
@@ -674,5 +676,6 @@ const SendButton = memo(PureSendButton, (prevProps, nextProps) => {
   if (prevProps.uploadQueue.length !== nextProps.uploadQueue.length)
     return false;
   if (prevProps.input !== nextProps.input) return false;
+  if (!equal(prevProps.attachments, nextProps.attachments)) return false;
   return true;
 });

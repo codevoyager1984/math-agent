@@ -111,6 +111,7 @@
     "privateDescription": "只有您可以访问此对话"
   },
   "errors": {
+    "error": "错误",
     "genericError": "出现错误，请重试。",
     "networkError": "网络错误，请检查您的连接。",
     "authError": "认证错误，请重新登录。",
