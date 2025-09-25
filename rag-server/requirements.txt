@@ -20,3 +20,4 @@ docx2txt
 loguru
 elasticsearch>=8.0.0
 elasticsearch-dsl>=8.0.0
+oss2

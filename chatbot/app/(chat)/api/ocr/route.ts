@@ -88,7 +88,7 @@ export async function POST(request: Request) {
       max_tokens: 2000,
       temperature: 0.1,
       thinking: {
-        type: "disabled"
+        type: "enabled"
       }
     };
 

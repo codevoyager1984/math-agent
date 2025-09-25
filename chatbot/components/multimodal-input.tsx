@@ -37,6 +37,7 @@ import type { Attachment, ChatMessage } from "@/lib/types";
 import { DEFAULT_CHAT_MODEL } from "@/lib/ai/models";
 import { saveChatModelAsCookie } from "@/app/(chat)/actions";
 import { startTransition } from "react";
+import { getUploadApiUrl } from "@/lib/rag-config";
 
 function PureMultimodalInput({
   chatId,
@@ -270,33 +271,41 @@ function PureMultimodalInput({
       formData.append("file", file);
 
       try {
-        const response = await fetch("/api/files/upload", {
+        // 使用配置文件获取上传URL
+        const uploadUrl = getUploadApiUrl();
+        
+        const response = await fetch(uploadUrl, {
           method: "POST",
           body: formData,
         });
 
         if (response.ok) {
           const data = await response.json();
-          const { url, pathname, contentType } = data;
+          
+          if (data.success) {
+            const attachment = {
+              url: data.url,
+              name: data.filename || file.name,
+              contentType: file.type,
+              // For images, initialize with ocrLoading: true
+              ...(file.type.startsWith("image/") && { ocrLoading: true }),
+            };
 
-          const attachment = {
-            url,
-            name: pathname,
-            contentType: contentType,
-            // For images, initialize with ocrLoading: true
-            ...(contentType.startsWith("image/") && { ocrLoading: true }),
-          };
+            // If it's an image, trigger OCR
+            if (file.type.startsWith("image/")) {
+              performOCR(data.url, attachment);
+            }
 
-          // If it's an image, trigger OCR
-          if (contentType.startsWith("image/")) {
-            performOCR(url, attachment);
+            return attachment;
+          } else {
+            toast.error(data.message || t("errors.uploadFailed"));
           }
-
-          return attachment;
+        } else {
+          const errorData = await response.json();
+          toast.error(errorData.detail || t("errors.uploadFailed"));
         }
-        const { error } = await response.json();
-        toast.error(error);
       } catch (error) {
+        console.error("Upload error:", error);
         toast.error(t("errors.uploadFailed"));
       }
     },
