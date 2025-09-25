@@ -76,6 +76,7 @@ const LazyMarkdownRenderer = memo(({ content }: { content: string }) => {
           );
         });
 
+        MarkdownWithMath.displayName = 'MarkdownWithMath';
         setMarkdownComponent(() => MarkdownWithMath);
         setIsMarkdownLoaded(true);
       } catch (error) {
