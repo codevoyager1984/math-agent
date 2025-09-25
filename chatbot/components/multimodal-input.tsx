@@ -465,6 +465,13 @@ function PureMultimodalInput({
                       fileInputRef.current.value = '';
                     }
                   }}
+                  onOcrTextChange={(newText) => {
+                    setAttachments((currentAttachments) =>
+                      currentAttachments.map((a) =>
+                        a.url === attachment.url ? { ...a, ocrText: newText } : a
+                      )
+                    );
+                  }}
                 />
               ))}
 

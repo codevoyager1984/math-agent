@@ -92,7 +92,7 @@ export async function POST(request: Request) {
       }
     };
 
-    console.log(`🚀 正在使用 GPT-5 识别图片文字...`);
+    console.log(`🚀 正在使用 Doubao Vision 模型识别图片文字...`);
     console.log('⏳ 请稍等...');
     
     const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {

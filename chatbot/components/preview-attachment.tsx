@@ -1,7 +1,9 @@
 import type { Attachment } from '@/lib/types';
 import { Loader } from './elements/loader';
+import { Response } from './elements/response';
 import { CrossSmallIcon, } from './icons';
 import { Button } from './ui/button';
+import { Textarea } from './ui/textarea';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
@@ -11,14 +13,20 @@ export const PreviewAttachment = ({
   isUploading = false,
   onRemove,
   onEdit,
+  onOcrTextChange,
 }: {
   attachment: Attachment;
   isUploading?: boolean;
   onRemove?: () => void;
   onEdit?: () => void;
+  onOcrTextChange?: (newText: string) => void;
 }) => {
   const { name, url, contentType, ocrText, ocrLoading } = attachment;
   const [showPreview, setShowPreview] = useState(false);
+  const [showOcrPreview, setShowOcrPreview] = useState(false);
+  const [isEditingOcr, setIsEditingOcr] = useState(false);
+  const [editedOcrText, setEditedOcrText] = useState(ocrText || '');
+  const [editPreviewMode, setEditPreviewMode] = useState<'edit' | 'preview'>('edit');
   const { t } = useTranslation();
 
   const handleImageClick = () => {
@@ -26,6 +34,23 @@ export const PreviewAttachment = ({
       setShowPreview(true);
     }
   };
+
+  const handleSaveOcrText = () => {
+    if (onOcrTextChange) {
+      onOcrTextChange(editedOcrText);
+    }
+    setIsEditingOcr(false);
+  };
+
+  const handleCancelOcrEdit = () => {
+    setEditedOcrText(ocrText || '');
+    setIsEditingOcr(false);
+  };
+
+  // Update edited text when ocrText changes
+  useEffect(() => {
+    setEditedOcrText(ocrText || '');
+  }, [ocrText]);
 
   // Handle ESC key to close preview
   useEffect(() => {
@@ -113,10 +138,43 @@ export const PreviewAttachment = ({
       {/* OCR Result Display */}
       {contentType?.startsWith('image') && ocrText && (
         <div className="mt-2 max-w-xs">
-          <div className="text-xs text-muted-foreground mb-1">识别结果:</div>
-          <div className="text-xs bg-muted rounded p-2 max-h-20 overflow-y-auto">
-            {ocrText}
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-xs text-muted-foreground">识别结果:</div>
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowOcrPreview(!showOcrPreview)}
+                className="h-5 px-1 text-xs"
+                title={showOcrPreview ? "折叠" : "展开预览"}
+              >
+                {showOcrPreview ? "折叠" : "展开"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsEditingOcr(true)}
+                className="h-5 px-1 text-xs"
+                title="编辑文本"
+              >
+                编辑
+              </Button>
+            </div>
           </div>
+          
+          {showOcrPreview ? (
+            <div className="text-xs bg-muted rounded p-2 max-h-32 overflow-y-auto">
+              <Response className="text-xs">{ocrText}</Response>
+            </div>
+          ) : (
+            <div className="text-xs bg-muted rounded p-2 max-h-12 overflow-hidden">
+              <div className="line-clamp-2">
+                <Response className="text-xs">{ocrText}</Response>
+              </div>
+            </div>
+          )}
         </div>
       )}
       
@@ -125,6 +183,117 @@ export const PreviewAttachment = ({
           <div className="text-xs text-muted-foreground">正在识别图片文字...</div>
         </div>
       )}
+
+      {/* OCR Edit Modal */}
+      <AnimatePresence>
+        {isEditingOcr && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[10003] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+            onClick={handleCancelOcrEdit}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: "spring", damping: 20, stiffness: 300 }}
+              className="relative w-full max-w-2xl bg-white dark:bg-gray-900 rounded-lg overflow-hidden shadow-2xl m-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between p-4 border-b dark:border-gray-700">
+                <div className="flex flex-col">
+                  <h3 className="text-lg font-semibold">编辑识别文本</h3>
+                  <div className="text-sm text-muted-foreground">
+                    修改OCR识别的文本内容，支持Markdown和LaTeX格式
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCancelOcrEdit}
+                  className="size-8 p-0"
+                  title="取消编辑"
+                >
+                  <CrossSmallIcon size={16} />
+                </Button>
+              </div>
+
+              {/* Mode Switcher */}
+              <div className="flex border-b dark:border-gray-700">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={`flex-1 rounded-none border-b-2 ${
+                    editPreviewMode === 'edit' 
+                      ? 'border-primary bg-muted' 
+                      : 'border-transparent'
+                  }`}
+                  onClick={() => setEditPreviewMode('edit')}
+                >
+                  编辑
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className={`flex-1 rounded-none border-b-2 ${
+                    editPreviewMode === 'preview' 
+                      ? 'border-primary bg-muted' 
+                      : 'border-transparent'
+                  }`}
+                  onClick={() => setEditPreviewMode('preview')}
+                >
+                  预览
+                </Button>
+              </div>
+
+              {/* Content */}
+              <div className="p-4 min-h-[300px]">
+                {editPreviewMode === 'edit' ? (
+                  <Textarea
+                    value={editedOcrText}
+                    onChange={(e) => setEditedOcrText(e.target.value)}
+                    placeholder="请输入文本内容...支持Markdown和LaTeX格式，例如：$x^2 + y^2 = z^2$"
+                    className="min-h-[250px] resize-none"
+                    autoFocus
+                  />
+                ) : (
+                  <div className="min-h-[250px] border rounded p-3 bg-background overflow-y-auto">
+                    {editedOcrText.trim() ? (
+                      <Response>{editedOcrText}</Response>
+                    ) : (
+                      <div className="text-muted-foreground text-center pt-20">
+                        暂无内容可预览
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-end gap-2 p-4 border-t dark:border-gray-700">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleCancelOcrEdit}
+                >
+                  取消
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleSaveOcrText}
+                  disabled={editedOcrText === ocrText}
+                >
+                  保存
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Image Preview Modal */}
       <AnimatePresence>
