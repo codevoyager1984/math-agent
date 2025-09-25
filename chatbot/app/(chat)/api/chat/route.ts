@@ -388,6 +388,8 @@ export async function POST(request: Request) {
     console.log(`[${requestId}] Stream ID created: ${streamId}`);
 
     console.log(`[${requestId}] Creating UI message stream with model: ${selectedChatModel}`);
+
+    let streamFinished = false;
     const stream = createUIMessageStream({
       execute: async ({ writer: dataStream }) => {
         console.log(`[${requestId}] Starting text streaming execution`);
@@ -516,7 +518,7 @@ ${existingKnowledgePoints.join(', ')}
               const reasoningTimeout = 10 * 60 * 1000; // 10 minutes in milliseconds
               const startTime = Date.now();
               
-              while (!reasoningFinished) {
+              while (!reasoningFinished && !streamFinished) {
                 const elapsed = Date.now() - startTime;
                 if (elapsed >= reasoningTimeout) {
                   console.log(`[${requestId}] Reasoning timeout reached (10 minutes), proceeding to next stage`);
@@ -525,6 +527,11 @@ ${existingKnowledgePoints.join(', ')}
                 }
                 console.log(`[${requestId}] Waiting for reasoning to finish (${Math.floor(elapsed / 1000)}s elapsed)`);
                 await new Promise(resolve => setTimeout(resolve, 1000));
+              }
+
+              if (streamFinished) {
+                console.log(`[${requestId}] Stream finished, skipping rest of the process`);
+                return;
               }
 
               // Send reasoning-end event
@@ -688,7 +695,7 @@ ${existingKnowledgePoints.join(', ')}
         console.log('messages', messages);
         console.log(`[${requestId}] Stream finished, saving ${messages.length} AI messages`);
         const saveAIStart = Date.now();
-        
+        streamFinished = true;
         try {
           await saveMessages({
             messages: messages.map((message) => ({

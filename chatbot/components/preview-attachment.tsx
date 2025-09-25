@@ -24,19 +24,6 @@ export const PreviewAttachment = ({
   inMessage?: boolean;
 }) => {
   const { name, url, contentType, ocrText, ocrLoading } = attachment;
-
-  // Debug logging - temporarily enabled to track OCR states
-  console.log('PreviewAttachment Debug:', {
-    name,
-    isUploading,
-    contentType,
-    ocrText,
-    ocrLoading,
-    hasOcrText: !!ocrText,
-    ocrTextLength: ocrText?.length,
-    ocrTextUndefined: ocrText === undefined
-  });
-
   const [showPreview, setShowPreview] = useState(false);
   const [showOcrPreview, setShowOcrPreview] = useState(false);
   const [isEditingOcr, setIsEditingOcr] = useState(false);
