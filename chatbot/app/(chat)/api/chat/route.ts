@@ -389,7 +389,7 @@ export async function POST(request: Request) {
 
     console.log(`[${requestId}] Creating UI message stream with model: ${selectedChatModel}`);
 
-    let streamFinished = false;
+    let thingStreamFinished = false;
     const stream = createUIMessageStream({
       execute: async ({ writer: dataStream }) => {
         console.log(`[${requestId}] Starting text streaming execution`);
@@ -515,10 +515,10 @@ ${existingKnowledgePoints.join(', ')}
               reasoningResult.consumeStream();
 
               // Wait for reasoning to complete with timeout (max 10 minutes)
-              const reasoningTimeout = 10 * 60 * 1000; // 10 minutes in milliseconds
+              const reasoningTimeout = 60 * 60 * 1000; // 10 minutes in milliseconds
               const startTime = Date.now();
               
-              while (!reasoningFinished && !streamFinished) {
+              while (!reasoningFinished && !thingStreamFinished) {
                 const elapsed = Date.now() - startTime;
                 if (elapsed >= reasoningTimeout) {
                   console.log(`[${requestId}] Reasoning timeout reached (10 minutes), proceeding to next stage`);
@@ -529,7 +529,7 @@ ${existingKnowledgePoints.join(', ')}
                 await new Promise(resolve => setTimeout(resolve, 1000));
               }
 
-              if (streamFinished) {
+              if (thingStreamFinished) {
                 console.log(`[${requestId}] Stream finished, skipping rest of the process`);
                 return;
               }
@@ -695,7 +695,7 @@ ${existingKnowledgePoints.join(', ')}
         console.log('messages', messages);
         console.log(`[${requestId}] Stream finished, saving ${messages.length} AI messages`);
         const saveAIStart = Date.now();
-        streamFinished = true;
+        thingStreamFinished = true;
         try {
           await saveMessages({
             messages: messages.map((message) => ({
@@ -723,6 +723,7 @@ ${existingKnowledgePoints.join(', ')}
         }
       },
       onError: (error) => {
+        thingStreamFinished = true;
         console.error(`[${requestId}] Stream error occurred:`, {
           error: error instanceof Error ? error.message : String(error),
           stack: error instanceof Error ? error.stack : undefined,
