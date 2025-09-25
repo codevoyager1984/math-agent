@@ -64,6 +64,7 @@ function PureArtifactMessages({
               hasSentMessage && index === messages.length - 1
             }
             isArtifactVisible={true}
+            chatStatus={status}
           />
         );
       })}

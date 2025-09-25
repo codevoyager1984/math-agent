@@ -9,8 +9,8 @@ import { SessionProvider } from 'next-auth/react';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://chat.vercel.ai'),
-  title: 'Next.js Chatbot Template',
-  description: 'Next.js chatbot template using the AI SDK.',
+  title: 'Math Agent',
+  description: 'Math Agent is a chatbot that can help you with your math problems.',
 };
 
 export const viewport = {

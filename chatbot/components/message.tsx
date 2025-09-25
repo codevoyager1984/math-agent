@@ -44,6 +44,7 @@ const PurePreviewMessage = ({
   isReadonly,
   requiresScrollPadding,
   isArtifactVisible,
+  chatStatus,
 }: {
   chatId: string;
   message: ChatMessage;
@@ -54,6 +55,7 @@ const PurePreviewMessage = ({
   isReadonly: boolean;
   requiresScrollPadding: boolean;
   isArtifactVisible: boolean;
+  chatStatus?: string;
 }) => {
   const { t } = useTranslation();
   const [mode, setMode] = useState<'view' | 'edit'>('view');
@@ -140,6 +142,7 @@ const PurePreviewMessage = ({
                               data-testid="message-edit-button"
                               variant="ghost"
                               className="px-2 rounded-full opacity-0 h-fit text-muted-foreground group-hover/message:opacity-100"
+                              disabled={chatStatus === 'streaming' || chatStatus === 'submitted'}
                               onClick={() => {
                                 setMode('edit');
                               }}
@@ -147,7 +150,11 @@ const PurePreviewMessage = ({
                               <PencilEditIcon />
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent>Edit message</TooltipContent>
+                          <TooltipContent>
+                            {chatStatus === 'streaming' || chatStatus === 'submitted' 
+                              ? t('chat.waitForModelResponse') 
+                              : 'Edit message'}
+                          </TooltipContent>
                         </Tooltip>
                       )}
 
@@ -365,6 +372,7 @@ export const PreviewMessage = memo(
       return false;
     if (!equal(prevProps.message.parts, nextProps.message.parts)) return false;
     if (!equal(prevProps.vote, nextProps.vote)) return false;
+    if (prevProps.chatStatus !== nextProps.chatStatus) return false;
 
     return false;
   },

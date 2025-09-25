@@ -101,6 +101,7 @@ function PureMessages({
                     hasSentMessage && index === messages.length - 1
                   }
                   isArtifactVisible={isArtifactVisible}
+                  chatStatus={status}
                 />
               );
             })}

@@ -42,7 +42,7 @@ import type { VisibilityType } from '@/components/visibility-selector';
 import { Session } from 'next-auth';
 import { deepseek } from '@ai-sdk/deepseek';
 
-export const maxDuration = 60;
+export const maxDuration = 600; // 10 minutes
 
 let globalStreamContext: ResumableStreamContext | null = null;
 
@@ -508,10 +508,19 @@ ${existingKnowledgePoints.join(', ')}
               console.log(`[${requestId}] Consuming reasoning stream`);
               reasoningResult.consumeStream();
 
-              // Wait for reasoning to complete with timeout
+              // Wait for reasoning to complete with timeout (max 10 minutes)
+              const reasoningTimeout = 10 * 60 * 1000; // 10 minutes in milliseconds
+              const startTime = Date.now();
+              
               while (!reasoningFinished) {
-                console.log(`[${requestId}] Waiting for reasoning to finish`);
-                await new Promise(resolve => setTimeout(resolve, 100));
+                const elapsed = Date.now() - startTime;
+                if (elapsed >= reasoningTimeout) {
+                  console.log(`[${requestId}] Reasoning timeout reached (10 minutes), proceeding to next stage`);
+                  reasoningFinished = true;
+                  break;
+                }
+                console.log(`[${requestId}] Waiting for reasoning to finish (${Math.floor(elapsed / 1000)}s elapsed)`);
+                await new Promise(resolve => setTimeout(resolve, 1000));
               }
 
               // Send reasoning-end event
