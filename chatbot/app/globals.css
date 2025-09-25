@@ -25,7 +25,7 @@
 .katex-display {
   overflow-x: auto;
   overflow-y: hidden;
-  margin: 1.8em 0 !important;
+  margin: 2.5em 0 !important;
 }
 
 /* Inline math spacing - higher specificity */
@@ -40,11 +40,22 @@ p .katex {
 
 /* Extra spacing between text and math */
 p:has(+ .katex-display) {
-  margin-bottom: 1em !important;
+  margin-bottom: 1.5em !important;
 }
 
 .katex-display + p {
-  margin-top: 1em !important;
+  margin-top: 1.5em !important;
+}
+
+/* Enhanced spacing for consecutive math elements */
+.katex-display + .katex-display {
+  margin-top: 2em !important;
+}
+
+/* Spacing for paragraphs containing math */
+p:has(.katex) {
+  margin: 1.2em 0 !important;
+  line-height: 1.7 !important;
 }
 
 /* Additional spacing for markdown content */

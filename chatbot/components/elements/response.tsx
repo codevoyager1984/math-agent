@@ -64,15 +64,18 @@ export const Response = memo(
       <div
         className={cn(
           'size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0',
-          // 添加数学公式间距样式
-          '[&_.katex]:mx-1',
-          '[&_.katex-display]:my-4',
-          '[&_p:has(.katex)]:my-2',
+          // 强制数学公式间距样式 - 使用更高的优先级
+          '[&_.katex]:!mx-1',
+          '[&_.katex-display]:!my-8',
+          '[&_p:has(.katex)]:!my-6',
+          // 专门针对数学公式行增加间距
+          '[&_p]:!leading-relaxed',
+          '[&_p]:!my-4',
           // 列表样式优化
           '[&_ol]:mb-4',
           '[&_ul]:mb-4',
           '[&_li]:mb-3',
-          '[&_li_p]:mb-1',
+          '[&_li_p]:mb-2',
           // 确保列表项内的段落有适当间距
           '[&_li>p:last-child]:mb-0',
           className,
@@ -95,7 +98,7 @@ export const Response = memo(
           components={{
             // 处理段落中的知识点标记
             p: ({ children }) => {
-              return <p className="mb-2 whitespace-pre-wrap">{processMarkdownChildren(children)}</p>;
+              return <p className="mb-3 mt-2 whitespace-pre-wrap leading-relaxed">{processMarkdownChildren(children)}</p>;
             },
             // 处理有序列表
             ol: ({ children, ...props }) => {
