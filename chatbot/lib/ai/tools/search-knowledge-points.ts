@@ -25,8 +25,10 @@ export const searchKnowledgePoints = ({ session, dataStream }: SearchKnowledgePo
         });
 
         // 调用 RAG 服务的知识点查询接口
-        const ragServerUrl = process.env.RAG_SERVER_URL || 'https://math-rag-server.farmbot.me';
-        const response = await fetch(`${ragServerUrl}/api/knowledge-base/query`, {
+        const ragServerBaseUrl = process.env.RAG_SERVER_URL || 'https://math-rag-server.farmbot.me';
+        const apiUrl = `${ragServerBaseUrl}/api/knowledge-base/query`;
+        console.log(`🔍 知识点搜索 RAG 服务搜索知识点 URL:`, apiUrl);
+        const response = await fetch(apiUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

@@ -20,10 +20,6 @@ import {
 import { convertToUIMessages, generateUUID } from '@/lib/utils';
 import type { ModelMessage, ToolCallPart, UIMessage, UIMessagePart } from 'ai';
 import { generateTitleFromUserMessage } from '../../actions';
-import { createDocument } from '@/lib/ai/tools/create-document';
-import { updateDocument } from '@/lib/ai/tools/update-document';
-import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
-import { getWeather } from '@/lib/ai/tools/get-weather';
 import { searchKnowledgePoints } from '@/lib/ai/tools/search-knowledge-points';
 import { isProductionEnvironment } from '@/lib/constants';
 import { myProvider } from '@/lib/ai/providers';
@@ -331,8 +327,10 @@ export async function POST(request: Request) {
     console.log(`[${requestId}] Fetching existing knowledge point names`);
     let existingKnowledgePoints: string[] = [];
     try {
-      const ragServerUrl = process.env.RAG_SERVER_URL || 'http://localhost:8000';
-      const knowledgeResponse = await fetch(`${ragServerUrl}/api/knowledge-base/names`, {
+      const ragServerUrl = process.env.RAG_SERVER_URL || 'https://math-rag-server.farmbot.me';
+      const apiUrl = `${ragServerUrl}/api/knowledge-base/names`;
+      console.log(`🔍 知识点搜索 RAG 服务获取知识点名称 URL:`, apiUrl);
+      const knowledgeResponse = await fetch(apiUrl, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
