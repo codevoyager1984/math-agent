@@ -24,6 +24,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 import { MessageEditor } from './message-editor';
 import { DocumentPreview } from './document-preview';
 import { MessageReasoning } from './message-reasoning';
+import { ChunkedMessageReasoning } from './chunked-message-reasoning';
+import { OptimizedResponse } from './elements/optimized-response';
 import type { UseChatHelpers } from '@ai-sdk/react';
 import type { ChatMessage } from '@/lib/types';
 import { useDataStream } from './data-stream-provider';
@@ -125,7 +127,7 @@ const PurePreviewMessage = ({
                 const reasoningIsLoading = isLoading && (part as any).state !== 'done';
                 
                 return (
-                  <MessageReasoning
+                  <ChunkedMessageReasoning
                     key={key}
                     isLoading={reasoningIsLoading}
                     reasoning={part.text}
@@ -168,7 +170,7 @@ const PurePreviewMessage = ({
                           'bg-transparent': message.role === 'assistant',
                         })}
                       >
-                        <Response>{sanitizeText(part.text)}</Response>
+                        <OptimizedResponse>{sanitizeText(part.text)}</OptimizedResponse>
                       </MessageContent>
                     </div>
                   );

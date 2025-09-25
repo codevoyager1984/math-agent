@@ -578,9 +578,6 @@ ${existingKnowledgePoints.join(', ')}
                   isEnabled: isProductionEnvironment,
                   functionId: 'action-stage',
                 },
-                onChunk: (chunk) => {
-                  console.log(`[${requestId}] Stage 2 Chunk received:`, chunk);
-                },
               });
 
               console.log(`[${requestId}] Two-stage StreamText result created, consuming stream`);

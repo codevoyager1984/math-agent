@@ -70,7 +70,7 @@ export const Response = memo(
           '[&_p:has(.katex)]:!my-6',
           // 专门针对数学公式行增加间距
           '[&_p]:!leading-relaxed',
-          '[&_p]:!my-4',
+          '[&_p]:!my-2',
           // 列表样式优化
           '[&_ol]:mb-4',
           '[&_ul]:mb-4',
