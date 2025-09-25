@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  # ChromaDB 向量数据库
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: math-agent-chromadb
+    ports:
+      - "18000:8000"
+    volumes:
+      - chroma-data:/chroma/chroma  # 使用命名卷持久化存储
+    environment:
+      - CHROMA_HOST=0.0.0.0
+      - CHROMA_PORT=8000
+      - CHROMA_LOG_LEVEL=INFO
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v2/heartbeat"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - math-agent-network
+
+  # Elasticsearch 全文搜索引擎
+  elasticsearch:
+    image: elasticsearch:8.11.0
+    container_name: math-agent-elasticsearch
+    ports:
+      - "9200:9200"   # REST API 端口
+      - "9300:9300"   # 集群通信端口
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data  # 使用命名卷数据持久化
+      - ./docker/config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro  # 配置文件
+    environment:
+      # 基本配置
+      - node.name=math-agent-es
+      - cluster.name=math-agent-cluster
+      - discovery.type=single-node
+
+      # 内存配置 (适合开发环境)
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+      - bootstrap.memory_lock=true
+
+      # 安全配置 (开发环境禁用)
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+
+      # 网络配置
+      - network.host=0.0.0.0
+      - http.port=9200
+
+      # 性能配置
+      - indices.query.bool.max_clause_count=2048
+      - search.max_buckets=65536
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - math-agent-network
+
+networks:
+  math-agent-network:
+    driver: bridge
+    name: math-agent-network
+
+volumes:
+  chroma-data:
+    driver: local
+  elasticsearch-data:
+    driver: local

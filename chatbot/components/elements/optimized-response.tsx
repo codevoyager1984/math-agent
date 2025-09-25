@@ -7,6 +7,7 @@ import { useChunkedContent } from '@/lib/chunk-renderer';
 interface OptimizedResponseProps {
   children: string;
   className?: string;
+  isHistorical?: boolean; // 是否为历史消息，历史消息不使用虚拟化
 }
 
 // Lazy load ReactMarkdown and KaTeX only when needed
@@ -182,13 +183,16 @@ LazyMarkdownRenderer.displayName = 'LazyMarkdownRenderer';
 const VirtualizedChunk = memo(({ 
   chunk, 
   chunkIndex, 
-  isVisible 
+  isVisible,
+  isHistorical = false
 }: { 
   chunk: string; 
   chunkIndex: number;
   isVisible: boolean;
+  isHistorical?: boolean;
 }) => {
-  if (!isVisible) {
+  // 对于历史消息，总是渲染；对于实时消息，使用虚拟化
+  if (!isVisible && !isHistorical) {
     // Render placeholder of estimated height
     const estimatedHeight = Math.max(100, chunk.length / 5);
     return (
@@ -208,7 +212,8 @@ const VirtualizedChunk = memo(({
 }, (prevProps, nextProps) => {
   return prevProps.chunk === nextProps.chunk && 
          prevProps.chunkIndex === nextProps.chunkIndex &&
-         prevProps.isVisible === nextProps.isVisible;
+         prevProps.isVisible === nextProps.isVisible &&
+         prevProps.isHistorical === nextProps.isHistorical;
 });
 
 VirtualizedChunk.displayName = 'VirtualizedChunk';
@@ -266,7 +271,7 @@ function useIntersectionObserver(options?: IntersectionObserverInit) {
 }
 
 export const OptimizedResponse = memo(
-  ({ children, className }: OptimizedResponseProps) => {
+  ({ children, className, isHistorical = false }: OptimizedResponseProps) => {
     const chunks = useChunkedContent(children);
     const { visibleChunks, observeElement } = useIntersectionObserver();
     
@@ -304,6 +309,7 @@ export const OptimizedResponse = memo(
               chunk={chunk}
               chunkIndex={index}
               isVisible={visibleChunks.has(index) || index === 0} // Always render first chunk
+              isHistorical={isHistorical}
             />
           </div>
         ))}

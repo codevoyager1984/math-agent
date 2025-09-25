@@ -170,7 +170,7 @@ const PurePreviewMessage = ({
                           'bg-transparent': message.role === 'assistant',
                         })}
                       >
-                        <OptimizedResponse>{sanitizeText(part.text)}</OptimizedResponse>
+                        <OptimizedResponse isHistorical={!isLoading}>{sanitizeText(part.text)}</OptimizedResponse>
                       </MessageContent>
                     </div>
                   );
