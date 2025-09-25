@@ -22,6 +22,19 @@ export const PreviewAttachment = ({
   onOcrTextChange?: (newText: string) => void;
 }) => {
   const { name, url, contentType, ocrText, ocrLoading } = attachment;
+
+  // Debug logging - temporarily enabled to track OCR states
+  console.log('PreviewAttachment Debug:', {
+    name,
+    isUploading,
+    contentType,
+    ocrText,
+    ocrLoading,
+    hasOcrText: !!ocrText,
+    ocrTextLength: ocrText?.length,
+    ocrTextUndefined: ocrText === undefined
+  });
+
   const [showPreview, setShowPreview] = useState(false);
   const [showOcrPreview, setShowOcrPreview] = useState(false);
   const [isEditingOcr, setIsEditingOcr] = useState(false);
@@ -30,7 +43,7 @@ export const PreviewAttachment = ({
   const { t } = useTranslation();
 
   const handleImageClick = () => {
-    if (contentType?.startsWith('image') && url && !isUploading) {
+    if (contentType?.startsWith('image') && url && !isUploading && !ocrLoading) {
       setShowPreview(true);
     }
   };
@@ -76,10 +89,20 @@ export const PreviewAttachment = ({
     <div className="group relative flex flex-col">
       <div data-testid="input-attachment-preview" className="relative size-16 rounded-lg overflow-hidden bg-muted border">
         {contentType?.startsWith('image') ? (
-          <div 
-            className="relative size-full group/image cursor-pointer"
+          <div
+            className={`relative size-full group/image ${
+              isUploading || ocrLoading ? 'cursor-default' : 'cursor-pointer'
+            }`}
             onClick={handleImageClick}
-            title="点击查看大图"
+            title={
+              isUploading
+                ? '上传中，请稍候...'
+                : ocrLoading
+                ? '正在识别文字，请稍候...'
+                : ocrText !== undefined
+                ? '点击查看大图'
+                : '等待处理，点击预览图片'
+            }
           >
             <img
               src={url}
@@ -122,16 +145,27 @@ export const PreviewAttachment = ({
         )}
 
         <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent text-white text-[10px] px-1 py-0.5 truncate">
-          {isUploading 
-            ? '上传中...' 
-            : ocrLoading 
-            ? '识别中...' 
-            : ocrText 
-            ? '识别完成' 
-            : contentType?.startsWith('image')
-            ? '图片预览'
-            : '文件预览'
-          }
+          {(() => {
+            if (isUploading) {
+              return '上传中...';
+            }
+
+            if (contentType?.startsWith('image')) {
+              if (ocrLoading === true) {
+                return '识别中...';
+              }
+
+              if (ocrLoading === false || ocrText !== undefined) {
+                return ocrText && ocrText.trim() ? '识别完成' : '无文字内容';
+              }
+
+              // OCR hasn't started yet for image files
+              return '等待处理...';
+            }
+
+            // Non-image files
+            return '文件预览';
+          })()}
         </div>
       </div>
       
@@ -178,11 +212,11 @@ export const PreviewAttachment = ({
         </div>
       )}
       
-      {contentType?.startsWith('image') && ocrLoading && (
+      {/* {contentType?.startsWith('image') && ocrLoading && (
         <div className="mt-2 max-w-xs">
           <div className="text-xs text-muted-foreground">正在识别图片文字...</div>
         </div>
-      )}
+      )} */}
 
       {/* OCR Edit Modal */}
       <AnimatePresence>
