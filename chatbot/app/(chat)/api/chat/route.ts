@@ -460,6 +460,10 @@ export async function POST(request: Request) {
 4. 是否需要搜索额外的知识点来辅助解答
 5. 最佳的回答策略和结构
 
+格式要求：
+1. 所有公式必须使用 latex 格式
+2. 有换行的地方注意需要换行
+
 现有的知识库包含以下知识点：
 ${existingKnowledgePoints.join(', ')}
 
