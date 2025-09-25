@@ -44,7 +44,7 @@ export const getDocuments = async (params: DocumentListParams = {}): Promise<Doc
   if (params.status) queryParams.append('status', params.status);
 
   return await request<DocumentListResponse>({
-    url: `/documents?${queryParams.toString()}`,
+    url: `/documents/?${queryParams.toString()}`,
     method: 'GET',
   });
 };

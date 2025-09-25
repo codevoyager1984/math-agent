@@ -55,7 +55,9 @@ export const updateKnowledgePoint = async (id: string, document: DocumentInput):
   return await request<KnowledgePoint>({
     url: `/knowledge-base/documents/${id}`,
     method: 'PUT',
-    data: document
+    data: {
+      knowledge_point: document
+    }
   });
 };
 
