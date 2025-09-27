@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { SearchIcon, BookOpenIcon, FilterIcon, LoaderIcon, AlertCircleIcon, ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, ChevronUpIcon } from 'lucide-react';
+import { SearchIcon, BookOpenIcon, FilterIcon, LoaderIcon, AlertCircleIcon, ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, ChevronUpIcon, TrendingUpIcon } from 'lucide-react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -102,9 +102,17 @@ function KnowledgePointCard({ knowledgePoint }: KnowledgePointCardProps) {
           <CardHeader className="pb-3">
             <div className="flex items-start justify-between">
               <div className="flex-1">
-                <CardTitle className="text-lg line-clamp-2 mb-2">
-                  {knowledgePoint.title}
-                </CardTitle>
+                <div className="flex items-center gap-2 mb-2">
+                  <CardTitle className="text-lg line-clamp-2">
+                    {knowledgePoint.title}
+                  </CardTitle>
+                  {knowledgePoint.relevanceScore !== undefined && (
+                    <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                      <TrendingUpIcon className="size-3" />
+                      <span>相似度: {Math.max(0, knowledgePoint.relevanceScore).toFixed(1)}%</span>
+                    </div>
+                  )}
+                </div>
                 <div className="text-sm text-muted-foreground line-clamp-3">
                   <OptimizedResponse className="text-sm">
                     {knowledgePoint.description}
