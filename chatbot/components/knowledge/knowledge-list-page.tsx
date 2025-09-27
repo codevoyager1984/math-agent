@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { motion } from 'framer-motion';
-import { SearchIcon, BookOpenIcon, FilterIcon, LoaderIcon, AlertCircleIcon, ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { SearchIcon, BookOpenIcon, FilterIcon, LoaderIcon, AlertCircleIcon, ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, ChevronUpIcon } from 'lucide-react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -158,11 +158,15 @@ export function KnowledgeListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedTag, setSelectedTag] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const [categories, setCategories] = useState<string[]>([]);
+  const [tags, setTags] = useState<string[]>([]);
+  const [showAllTags, setShowAllTags] = useState(false);
 
   const pageSize = 12;
 
@@ -177,26 +181,54 @@ export function KnowledgeListPage() {
     return Array.from(categorySet).sort();
   };
 
+  // 从知识点中提取标签
+  const extractTags = (points: KnowledgePoint[]) => {
+    const tagSet = new Set<string>();
+    points.forEach(point => {
+      if (point.tags && point.tags.length > 0) {
+        point.tags.forEach(tag => tagSet.add(tag));
+      }
+    });
+    return Array.from(tagSet).sort();
+  };
+
   // 加载知识点数据
-  const loadKnowledgePoints = async (page = 1, search = '', category = '') => {
+  const loadKnowledgePoints = async (page = 1, search = '', category = '', tag = '') => {
     try {
       setLoading(true);
       setError(null);
 
       const response = await getKnowledgePoints({
         page,
-        limit: pageSize,
+        limit: pageSize * 3, // 获取更多数据用于前端标签筛选
         search: search || undefined,
         category: category || undefined,
       });
 
-      setKnowledgePoints(response.knowledge_points);
-      setTotalCount(response.total);
-      setTotalPages(Math.ceil(response.total / pageSize));
+      let filteredPoints = response.knowledge_points;
+
+      // 如果有标签筛选，在前端进行筛选
+      if (tag) {
+        filteredPoints = response.knowledge_points.filter(point => 
+          point.tags && point.tags.includes(tag)
+        );
+      }
+
+      // 分页处理（前端分页）
+      const startIndex = (page - 1) * pageSize;
+      const endIndex = startIndex + pageSize;
+      const paginatedPoints = filteredPoints.slice(startIndex, endIndex);
+
+      setKnowledgePoints(paginatedPoints);
+      setTotalCount(filteredPoints.length);
+      setTotalPages(Math.ceil(filteredPoints.length / pageSize));
       
-      // 提取分类（仅在首次加载时）
-      if (page === 1 && !search && !category) {
+      // 提取分类和标签（仅在首次加载时）
+      if (page === 1 && !search && !category && !tag) {
         setCategories(extractCategories(response.knowledge_points));
+        setTags(extractTags(response.knowledge_points));
+        // 重置标签展开状态
+        setShowAllTags(false);
       }
 
     } catch (err) {
@@ -206,24 +238,52 @@ export function KnowledgeListPage() {
     }
   };
 
-  // 处理搜索
-  const handleSearch = (query: string) => {
-    setSearchQuery(query);
+  // 搜索防抖
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // 当防抖后的搜索词改变时触发搜索
+  useEffect(() => {
+    // 跳过初始化时的调用
+    if (debouncedSearchQuery === '' && searchQuery === '' && selectedCategory === '' && selectedTag === '') {
+      return;
+    }
     setCurrentPage(1);
-    loadKnowledgePoints(1, query, selectedCategory);
+    loadKnowledgePoints(1, debouncedSearchQuery, selectedCategory, selectedTag);
+  }, [debouncedSearchQuery]);
+
+  // 处理搜索输入
+  const handleSearchInput = (query: string) => {
+    setSearchQuery(query);
   };
 
   // 处理分类筛选
   const handleCategoryChange = (category: string) => {
     setSelectedCategory(category);
     setCurrentPage(1);
-    loadKnowledgePoints(1, searchQuery, category);
+    // 重置标签展开状态
+    setShowAllTags(false);
+    // 直接调用加载函数，不需要等待防抖
+    loadKnowledgePoints(1, debouncedSearchQuery, category, selectedTag);
+  };
+
+  // 处理标签筛选
+  const handleTagChange = (tag: string) => {
+    setSelectedTag(tag);
+    setCurrentPage(1);
+    // 直接调用加载函数，不需要等待防抖
+    loadKnowledgePoints(1, debouncedSearchQuery, selectedCategory, tag);
   };
 
   // 处理分页
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
-    loadKnowledgePoints(page, searchQuery, selectedCategory);
+    loadKnowledgePoints(page, debouncedSearchQuery, selectedCategory, selectedTag);
   };
 
   // 初始化加载
@@ -295,38 +355,118 @@ export function KnowledgeListPage() {
         </div>
 
         {/* 搜索和筛选 */}
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1">
-            <div className="relative">
-              <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 size-4 text-muted-foreground" />
-              <Input
-                placeholder="搜索知识点..."
-                value={searchQuery}
-                onChange={(e) => handleSearch(e.target.value)}
-                className="pl-10"
-              />
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1">
+              <div className="relative">
+                <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 size-4 text-muted-foreground" />
+                <Input
+                  placeholder="搜索知识点..."
+                  value={searchQuery}
+                  onChange={(e) => handleSearchInput(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
             </div>
           </div>
-          
+
+          {/* 分类筛选 */}
           {categories.length > 0 && (
-            <div className="flex gap-2 flex-wrap">
-              <Button
-                variant={selectedCategory === '' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => handleCategoryChange('')}
-              >
-                全部分类
-              </Button>
-              {categories.map((category) => (
+            <div>
+              <h3 className="text-sm font-medium text-muted-foreground mb-2">按分类筛选：</h3>
+              <div className="flex gap-2 flex-wrap">
                 <Button
-                  key={category}
-                  variant={selectedCategory === category ? 'default' : 'outline'}
+                  variant={selectedCategory === '' ? 'default' : 'outline'}
                   size="sm"
-                  onClick={() => handleCategoryChange(category)}
+                  onClick={() => handleCategoryChange('')}
                 >
-                  {category}
+                  全部分类
                 </Button>
-              ))}
+                {categories.map((category) => (
+                  <Button
+                    key={category}
+                    variant={selectedCategory === category ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => handleCategoryChange(category)}
+                  >
+                    {category}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 标签筛选 */}
+          {tags.length > 0 && (
+            <div>
+              <h3 className="text-sm font-medium text-muted-foreground mb-2">按标签筛选：</h3>
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  variant={selectedTag === '' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => handleTagChange('')}
+                >
+                  全部标签
+                </Button>
+                
+                {/* 始终显示的前8个标签 */}
+                {tags.slice(0, 8).map((tag) => (
+                  <Button
+                    key={tag}
+                    variant={selectedTag === tag ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => handleTagChange(tag)}
+                  >
+                    {tag}
+                  </Button>
+                ))}
+                
+                {/* 展开时显示的额外标签 */}
+                <AnimatePresence>
+                  {showAllTags && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.9 }}
+                      transition={{ duration: 0.2 }}
+                      className="flex gap-2 flex-wrap"
+                    >
+                      {tags.slice(8).map((tag) => (
+                        <Button
+                          key={tag}
+                          variant={selectedTag === tag ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => handleTagChange(tag)}
+                        >
+                          {tag}
+                        </Button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+                
+                {/* 展开/收起按钮 */}
+                {tags.length > 8 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs px-3 py-1 h-8 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                    onClick={() => setShowAllTags(!showAllTags)}
+                  >
+                    {showAllTags ? (
+                      <>
+                        <ChevronUpIcon className="size-3 mr-1" />
+                        收起标签
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDownIcon className="size-3 mr-1" />
+                        +{tags.length - 8} 个标签
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -355,10 +495,10 @@ export function KnowledgeListPage() {
         <div className="flex flex-col items-center justify-center py-12">
           <BookOpenIcon className="size-16 text-muted-foreground/50 mb-4" />
           <h3 className="text-xl font-semibold text-muted-foreground mb-2">
-            {searchQuery || selectedCategory ? '未找到相关知识点' : '暂无知识点'}
+            {debouncedSearchQuery || selectedCategory || selectedTag ? '未找到相关知识点' : '暂无知识点'}
           </h3>
           <p className="text-muted-foreground">
-            {searchQuery || selectedCategory
+            {debouncedSearchQuery || selectedCategory || selectedTag
               ? '请尝试调整搜索关键词或筛选条件'
               : '知识库正在建设中，敬请期待'}
           </p>
@@ -371,8 +511,9 @@ export function KnowledgeListPage() {
           <div className="mb-6">
             <p className="text-sm text-muted-foreground">
               找到 {totalCount} 个知识点
-              {searchQuery && ` · 搜索关键词: "${searchQuery}"`}
+              {debouncedSearchQuery && ` · 搜索关键词: "${debouncedSearchQuery}"`}
               {selectedCategory && ` · 分类: ${selectedCategory}`}
+              {selectedTag && ` · 标签: ${selectedTag}`}
             </p>
           </div>
 
