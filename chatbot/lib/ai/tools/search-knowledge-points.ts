@@ -73,6 +73,8 @@ export const searchKnowledgePoints = ({ session, dataStream }: SearchKnowledgePo
             examples = JSON.parse(metadata.examples || '[]');
             tags = JSON.parse(metadata.tags || '[]');
           } catch (e) {
+            examples = metadata.examples || [];
+            tags = metadata.tags || [];
             // console.warn('Failed to parse knowledge point metadata:', e);
           }
 

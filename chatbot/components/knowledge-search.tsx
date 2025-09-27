@@ -52,11 +52,25 @@ export const KnowledgeSearch = memo(function KnowledgeSearch({
 }: KnowledgeSearchProps) {
   // 管理每个知识点的展开状态
   const [expandedPoints, setExpandedPoints] = useState<Set<string>>(new Set());
+  // 管理例题的展开状态
+  const [expandedExamples, setExpandedExamples] = useState<Set<string>>(new Set());
   // 管理复制状态
   const [copiedPoints, setCopiedPoints] = useState<Set<string>>(new Set());
   
   const toggleExpanded = (pointId: string) => {
     setExpandedPoints(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(pointId)) {
+        newSet.delete(pointId);
+      } else {
+        newSet.add(pointId);
+      }
+      return newSet;
+    });
+  };
+  
+  const toggleExamples = (pointId: string) => {
+    setExpandedExamples(prev => {
       const newSet = new Set(prev);
       if (newSet.has(pointId)) {
         newSet.delete(pointId);
@@ -169,6 +183,7 @@ export const KnowledgeSearch = memo(function KnowledgeSearch({
 
       {knowledgePoints.map((point, index) => {
         const isExpanded = expandedPoints.has(point.id);
+        const isExamplesExpanded = expandedExamples.has(point.id);
         const isCopied = copiedPoints.has(point.id);
         const descriptionLines = countLines(point.description);
         const shouldShowToggle = descriptionLines > 8;
@@ -261,31 +276,61 @@ export const KnowledgeSearch = memo(function KnowledgeSearch({
               {point.examples.length > 0 && (
                 <CardContent className="pt-0">
                   <div className="space-y-2">
-                    <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                      相关例题:
-                    </h4>
-                    {point.examples.map((example, exampleIndex) => (
-                      <div
-                        key={exampleIndex}
-                        className="p-3 bg-gray-50 dark:bg-gray-800 rounded-md border-l-2 border-l-orange-400"
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                        相关例题 ({point.examples.length} 道)
+                      </h4>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-xs px-2"
+                        onClick={() => toggleExamples(point.id)}
                       >
-                        <div className="text-xs">
-                          <div className="font-medium mb-1">
-                            例题 {exampleIndex + 1}:
-                          </div>
-                          <div className="text-gray-700 dark:text-gray-300 mb-2">
-                            <Response>{example.question}</Response>
-                          </div>
-                          <div className="text-xs text-gray-600 dark:text-gray-400">
-                            <span className="font-medium">解答思路:</span>
-                            <Response className="inline ml-1">{example.solution}</Response>
-                          </div>
-                          <Badge variant="outline" className="mt-1 text-xs">
-                            难度: {example.difficulty}
-                          </Badge>
+                        {isExamplesExpanded ? (
+                          <>
+                            <ChevronUpIcon className="size-3 mr-1" />
+                            收起例题
+                          </>
+                        ) : (
+                          <>
+                            <ChevronDownIcon className="size-3 mr-1" />
+                            展开例题
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                    
+                    {isExamplesExpanded && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="space-y-2 mt-2">
+                          {point.examples.map((example, exampleIndex) => (
+                            <div
+                              key={exampleIndex}
+                              className="p-3 bg-gray-50 dark:bg-gray-800 rounded-md border-l-2 border-l-orange-400"
+                            >
+                              <div className="text-xs">
+                                <div className="text-gray-700 dark:text-gray-300 mb-2">
+                                  <Response>{example.question}</Response>
+                                </div>
+                                <div className="text-xs text-gray-600 dark:text-gray-400">
+                                  <span className="font-medium">解答思路:</span>
+                                  <Response className="inline ml-1">{example.solution}</Response>
+                                </div>
+                                <Badge variant="outline" className="mt-1 text-xs">
+                                  难度: {example.difficulty}
+                                </Badge>
+                              </div>
+                            </div>
+                          ))}
                         </div>
-                      </div>
-                    ))}
+                      </motion.div>
+                    )}
                   </div>
                 </CardContent>
               )}
