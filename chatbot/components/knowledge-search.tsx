@@ -187,14 +187,14 @@ export const KnowledgeSearch = memo(function KnowledgeSearch({
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <CardTitle className="text-lg">{point.title}</CardTitle>
+                      <CardTitle className="text-base">{point.title}</CardTitle>
                       <div className="flex items-center gap-1 text-xs text-gray-500">
                         <TrendingUpIcon className="size-3" />
                         <span>相似度: {Math.max(0, point.relevanceScore).toFixed(1)}%</span>
                       </div>
                     </div>
                     <div className="mt-1">
-                      <Response className="text-sm text-muted-foreground">
+                      <Response className="text-xm text-muted-foreground">
                         {displayDescription}
                       </Response>
                     </div>
@@ -257,7 +257,7 @@ export const KnowledgeSearch = memo(function KnowledgeSearch({
               {point.examples.length > 0 && (
                 <CardContent className="pt-0">
                   <div className="space-y-2">
-                    <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <h4 className="text-xs font-medium text-gray-700 dark:text-gray-300">
                       相关例题:
                     </h4>
                     {point.examples.map((example, exampleIndex) => (
@@ -265,7 +265,7 @@ export const KnowledgeSearch = memo(function KnowledgeSearch({
                         key={exampleIndex}
                         className="p-3 bg-gray-50 dark:bg-gray-800 rounded-md border-l-2 border-l-orange-400"
                       >
-                        <div className="text-sm">
+                        <div className="text-xs">
                           <div className="font-medium mb-1">
                             例题 {exampleIndex + 1}:
                           </div>
