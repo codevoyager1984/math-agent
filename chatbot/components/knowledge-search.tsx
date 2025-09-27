@@ -195,7 +195,10 @@ export const KnowledgeSearch = memo(function KnowledgeSearch({
                       </div>
                     </div>
                     <div className="mt-1">
-                      <OptimizedResponse className="text-xm text-muted-foreground">
+                      <OptimizedResponse 
+                        key={`${point.id}-${isExpanded ? 'expanded' : 'collapsed'}`}
+                        className="text-xs text-muted-foreground"
+                      >
                         {displayDescription}
                       </OptimizedResponse>
                     </div>
