@@ -2,7 +2,7 @@
 
 import { memo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { SearchIcon, BookOpenIcon, TagIcon, LoaderIcon, TrendingUpIcon, ChevronDownIcon, ChevronUpIcon, CopyIcon, CheckIcon } from 'lucide-react';
+import { SearchIcon, BookOpenIcon, TagIcon, LoaderIcon, TrendingUpIcon, ChevronDownIcon, ChevronUpIcon, CopyIcon, CheckIcon, ExternalLinkIcon } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -223,6 +223,15 @@ export const KnowledgeSearch = memo(function KnowledgeSearch({
                     <Badge variant="secondary">
                       {point.category}
                     </Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0"
+                      onClick={() => window.open(`/knowledge/${point.id}`, '_blank', 'noopener,noreferrer')}
+                      title="查看详情"
+                    >
+                      <ExternalLinkIcon className="size-3" />
+                    </Button>
                     <Button
                       variant="ghost"
                       size="sm"

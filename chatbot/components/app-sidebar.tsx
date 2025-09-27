@@ -4,6 +4,7 @@ import type { User } from 'next-auth';
 import { useRouter } from 'next/navigation';
 
 import { PlusIcon } from '@/components/icons';
+import { BookOpenIcon } from 'lucide-react';
 import { SidebarHistory } from '@/components/sidebar-history';
 import { SidebarUserNav } from '@/components/sidebar-user-nav';
 import { Button } from '@/components/ui/button';
@@ -59,7 +60,35 @@ export function AppSidebar({ user }: { user: User | undefined }) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <SidebarHistory user={user} />
+        {/* 导航链接 */}
+        <div className="px-2 py-2">
+          <SidebarMenu>
+            <div className="flex flex-col gap-1">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Link
+                    href="/knowledge"
+                    onClick={() => {
+                      setOpenMobile(false);
+                    }}
+                    className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-muted transition-colors text-sm"
+                  >
+                    <BookOpenIcon className="size-4" />
+                    <span>知识库</span>
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  浏览数学知识点
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          </SidebarMenu>
+        </div>
+        
+        {/* 聊天历史 */}
+        <div className="border-t">
+          <SidebarHistory user={user} />
+        </div>
       </SidebarContent>
       <SidebarFooter>{user && <SidebarUserNav user={user} />}</SidebarFooter>
     </Sidebar>
