@@ -7,11 +7,12 @@ export const metadata: Metadata = {
 };
 
 interface PageProps {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
-export default function KnowledgeDetailRoute({ params }: PageProps) {
-  return <KnowledgeDetailPage knowledgeId={params.id} />;
+export default async function KnowledgeDetailRoute({ params }: PageProps) {
+  const { id } = await params;
+  return <KnowledgeDetailPage knowledgeId={id} />;
 }
