@@ -2,6 +2,7 @@ import { tool, type UIMessageStreamWriter } from 'ai';
 import { z } from 'zod';
 import type { Session } from 'next-auth';
 import type { ChatMessage } from '@/lib/types';
+import { logger } from '@/lib/logger';
 
 interface SearchKnowledgePointsProps {
   session: Session;
@@ -27,7 +28,7 @@ export const searchKnowledgePoints = ({ session, dataStream }: SearchKnowledgePo
         // 调用 RAG 服务的知识点查询接口
         const ragServerBaseUrl = process.env.RAG_SERVER_URL || 'https://math-rag-server.farmbot.me';
         const apiUrl = `${ragServerBaseUrl}/api/knowledge-base/query`;
-        console.log(`🔍 知识点搜索 RAG 服务搜索知识点 URL:`, apiUrl);
+        logger.info(`🔍 知识点搜索 RAG 服务搜索知识点 URL:`, apiUrl);
         const response = await fetch(apiUrl, {
           method: 'POST',
           headers: {
@@ -50,9 +51,8 @@ export const searchKnowledgePoints = ({ session, dataStream }: SearchKnowledgePo
 
         const data = await response.json();
 
-        console.log(`🔍 知识点搜索原始内容:`, data);
         // 记录搜索结果的详细信息
-        console.log(`🔍 知识点搜索结果:`, {
+        logger.info(`🔍 知识点搜索结果:`, {
           query,
           totalResults: data.total_results || 0,
           resultsCount: data.results?.length || 0,
@@ -80,7 +80,7 @@ export const searchKnowledgePoints = ({ session, dataStream }: SearchKnowledgePo
           const similarityScore = result.similarity_score || result.final_score || 0;
 
           // 记录每个结果的得分值用于调试
-          console.log(`📊 知识点 ${index + 1} "${metadata.title}": 距离=${distance}, 相似度=${similarityScore}`);
+          logger.info(`📊 知识点 ${index + 1} "${metadata.title}": 距离=${distance}, 相似度=${similarityScore}`);
 
           return {
             id: result.id,

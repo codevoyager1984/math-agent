@@ -36,7 +36,7 @@ import type { ChatMessage } from '@/lib/types';
 import type { ChatModel } from '@/lib/ai/models';
 import type { VisibilityType } from '@/components/visibility-selector';
 import { Session } from 'next-auth';
-import { deepseek } from '@ai-sdk/deepseek';
+import { logger } from '@/lib/logger';
 
 export const maxDuration = 600; // 10 minutes
 
@@ -58,7 +58,7 @@ function filterImageAttachments(messages: UIMessage[]): UIMessage[] {
       const isImage = part.mediaType?.startsWith('image/');
       if (isImage) {
         filteredImageCount++;
-        console.log(`🖼️ 过滤图片文件: ${(part as any).name || 'unknown'} (${part.mediaType})`);
+        logger.info(`🖼️ 过滤图片文件: ${(part as any).name || 'unknown'} (${part.mediaType})`);
       }
       
       return !isImage;
@@ -66,7 +66,7 @@ function filterImageAttachments(messages: UIMessage[]): UIMessage[] {
   }));
   
   if (filteredImageCount > 0) {
-    console.log(`🖼️ 总计过滤了 ${filteredImageCount} 个图片附件（DeepSeek 不支持图片）`);
+    logger.info(`🖼️ 总计过滤了 ${filteredImageCount} 个图片附件（DeepSeek 不支持图片）`);
   }
   
   return filtered;
@@ -113,7 +113,7 @@ function cleanupIncompleteToolCalls(messages: ModelMessage[]): ModelMessage[] {
         const otherContent = message.content.filter((part: any) => part.type !== 'tool-call');
         
         if (validToolCalls.length !== toolCalls.length) {
-          console.log(`🔧 清理不完整的 tool calls: 移除了 ${toolCalls.length - validToolCalls.length} 个没有响应的 tool call`);
+          logger.info(`🔧 清理不完整的 tool calls: 移除了 ${toolCalls.length - validToolCalls.length} 个没有响应的 tool call`);
         }
         
         // Only include the message if it has valid content (text or valid tool calls)
@@ -144,7 +144,7 @@ export function getStreamContext() {
       });
     } catch (error: any) {
       if (error.message.includes('REDIS_URL')) {
-        console.log(
+        logger.info(
           ' > Resumable streams are disabled due to missing REDIS_URL',
         );
       } else {
@@ -161,15 +161,15 @@ export async function POST(request: Request) {
   const requestId = generateUUID().slice(0, 8);
   const startTime = Date.now();
   
-  console.log(`[${requestId}] Chat API request started`);
+  logger.info(`[${requestId}] Chat API request started`);
   
   let requestBody: PostRequestBody;
 
   try {
-    console.log(`[${requestId}] Parsing request body`);
+    logger.info(`[${requestId}] Parsing request body`);
     const json = await request.json();
     requestBody = postRequestBodySchema.parse(json);
-    console.log(`[${requestId}] Request body parsed successfully:`, {
+    logger.info(`[${requestId}] Request body parsed successfully:`, {
       id: requestBody.id,
       messageId: requestBody.message?.id,
       model: requestBody.selectedChatModel,
@@ -204,10 +204,10 @@ export async function POST(request: Request) {
     selectedChatModel = requestData.selectedChatModel;
     const { message, selectedVisibilityType } = requestData;
 
-    console.log(`[${requestId}] Authenticating user`);
+    logger.info(`[${requestId}] Authenticating user`);
     const authStart = Date.now();
     session = await auth();
-    console.log(`[${requestId}] Authentication completed in ${Date.now() - authStart}ms`);
+    logger.info(`[${requestId}] Authentication completed in ${Date.now() - authStart}ms`);
 
     if (!session?.user) {
       console.warn(`[${requestId}] Unauthorized access attempt`);
@@ -215,19 +215,19 @@ export async function POST(request: Request) {
     }
 
     const userType: UserType = session.user.type;
-    console.log(`[${requestId}] Authenticated user:`, {
+    logger.info(`[${requestId}] Authenticated user:`, {
       userId: session.user.id,
       userType,
       chatId: id
     });
 
-    console.log(`[${requestId}] Checking rate limits`);
+    logger.info(`[${requestId}] Checking rate limits`);
     const rateLimitStart = Date.now();
     const messageCount = await getMessageCountByUserId({
       id: session.user.id,
       differenceInHours: 24,
     });
-    console.log(`[${requestId}] Rate limit check completed in ${Date.now() - rateLimitStart}ms`, {
+    logger.info(`[${requestId}] Rate limit check completed in ${Date.now() - rateLimitStart}ms`, {
       messageCount,
       maxAllowed: entitlementsByUserType[userType].maxMessagesPerDay,
       userType
@@ -242,21 +242,21 @@ export async function POST(request: Request) {
       return new ChatSDKError('rate_limit:chat').toResponse();
     }
 
-    console.log(`[${requestId}] Loading chat data`);
+    logger.info(`[${requestId}] Loading chat data`);
     const chatLoadStart = Date.now();
     const chat = await getChatById({ id });
-    console.log(`[${requestId}] Chat data loaded in ${Date.now() - chatLoadStart}ms`, {
+    logger.info(`[${requestId}] Chat data loaded in ${Date.now() - chatLoadStart}ms`, {
       chatExists: !!chat,
       chatUserId: chat?.userId
     });
 
     if (!chat) {
-      console.log(`[${requestId}] Creating new chat`);
+      logger.info(`[${requestId}] Creating new chat`);
       const titleStart = Date.now();
       const title = await generateTitleFromUserMessage({
         message,
       });
-      console.log(`[${requestId}] Title generated in ${Date.now() - titleStart}ms: "${title}"`);
+      logger.info(`[${requestId}] Title generated in ${Date.now() - titleStart}ms: "${title}"`);
 
       const saveChatStart = Date.now();
       await saveChat({
@@ -265,7 +265,7 @@ export async function POST(request: Request) {
         title,
         visibility: selectedVisibilityType,
       });
-      console.log(`[${requestId}] New chat saved in ${Date.now() - saveChatStart}ms`);
+      logger.info(`[${requestId}] New chat saved in ${Date.now() - saveChatStart}ms`);
     } else {
       if (chat.userId !== session.user.id) {
         console.warn(`[${requestId}] Forbidden chat access:`, {
@@ -275,20 +275,20 @@ export async function POST(request: Request) {
         });
         return new ChatSDKError('forbidden:chat').toResponse();
       }
-      console.log(`[${requestId}] Using existing chat`);
+      logger.info(`[${requestId}] Using existing chat`);
     }
 
-    console.log(`[${requestId}] Loading chat messages`);
+    logger.info(`[${requestId}] Loading chat messages`);
     const messagesStart = Date.now();
     const messagesFromDb = await getMessagesByChatId({ id });
     const uiMessages = [...convertToUIMessages(messagesFromDb), message];
-    console.log(`[${requestId}] Messages loaded in ${Date.now() - messagesStart}ms`, {
+    logger.info(`[${requestId}] Messages loaded in ${Date.now() - messagesStart}ms`, {
       dbMessagesCount: messagesFromDb.length,
       totalUIMessagesCount: uiMessages.length
     });
     
     // Filter out image attachments for DeepSeek models (they don't support images)
-    console.log(`[${requestId}] Filtering image attachments for DeepSeek compatibility`);
+    logger.info(`[${requestId}] Filtering image attachments for DeepSeek compatibility`);
     const filterStart = Date.now();
     const filteredMessages = filterImageAttachments(uiMessages);
     
@@ -296,17 +296,17 @@ export async function POST(request: Request) {
     const originalPartsCount = uiMessages.reduce((acc, msg) => acc + msg.parts.length, 0);
     const filteredPartsCount = filteredMessages.reduce((acc, msg) => acc + msg.parts.length, 0);
     
-    console.log(`[${requestId}] Message filtering completed in ${Date.now() - filterStart}ms`, {
+    logger.info(`[${requestId}] Message filtering completed in ${Date.now() - filterStart}ms`, {
       originalPartsCount,
       filteredPartsCount,
       removedParts: originalPartsCount - filteredPartsCount
     });
     
     if (originalPartsCount !== filteredPartsCount) {
-      console.log(`[${requestId}] 🖼️ 已过滤图片附件: ${originalPartsCount - filteredPartsCount} 个图片部分被移除`);
+      logger.info(`[${requestId}] 🖼️ 已过滤图片附件: ${originalPartsCount - filteredPartsCount} 个图片部分被移除`);
     }
 
-    console.log(`[${requestId}] Processing geolocation and request hints`);
+    logger.info(`[${requestId}] Processing geolocation and request hints`);
     const { longitude, latitude, city, country } = geolocation(request);
 
     const requestHints: RequestHints = {
@@ -316,7 +316,7 @@ export async function POST(request: Request) {
       country,
     };
     
-    console.log(`[${requestId}] Geolocation extracted:`, {
+    logger.info(`[${requestId}] Geolocation extracted:`, {
       longitude,
       latitude,
       city,
@@ -324,12 +324,12 @@ export async function POST(request: Request) {
     });
 
     // Fetch existing knowledge point names for enhanced system prompt
-    console.log(`[${requestId}] Fetching existing knowledge point names`);
+    logger.info(`[${requestId}] Fetching existing knowledge point names`);
     let existingKnowledgePoints: string[] = [];
     try {
       const ragServerUrl = process.env.RAG_SERVER_URL || 'https://math-rag-server.farmbot.me';
       const apiUrl = `${ragServerUrl}/api/knowledge-base/names`;
-      console.log(`🔍 知识点搜索 RAG 服务获取知识点名称 URL:`, apiUrl);
+      logger.info(`🔍 知识点搜索 RAG 服务获取知识点名称 URL:`, apiUrl);
       const knowledgeResponse = await fetch(apiUrl, {
         method: 'GET',
         headers: {
@@ -341,7 +341,7 @@ export async function POST(request: Request) {
       if (knowledgeResponse.ok) {
         const knowledgeData = await knowledgeResponse.json();
         existingKnowledgePoints = knowledgeData.names || [];
-        console.log(`[${requestId}] Retrieved ${existingKnowledgePoints.length} existing knowledge point names`);
+        logger.info(`[${requestId}] Retrieved ${existingKnowledgePoints.length} existing knowledge point names`);
       } else {
         console.warn(`[${requestId}] Failed to fetch knowledge point names: ${knowledgeResponse.status}`);
       }
@@ -351,7 +351,7 @@ export async function POST(request: Request) {
     }
 
     // Extract attachment info from file parts for storage
-    console.log(`[${requestId}] Processing message attachments`);
+    logger.info(`[${requestId}] Processing message attachments`);
     const attachments = message.parts
       .filter(part => part.type === 'file')
       .map(part => ({
@@ -360,11 +360,11 @@ export async function POST(request: Request) {
         contentType: part.mediaType || 'application/octet-stream',
       }));
     
-    console.log(`[${requestId}] Found ${attachments.length} attachments:`, 
+    logger.info(`[${requestId}] Found ${attachments.length} attachments:`, 
       attachments.map(att => ({ name: att.name, contentType: att.contentType })));
 
     // Save the original message with attachments for UI display
-    console.log(`[${requestId}] Saving user message to database`);
+    logger.info(`[${requestId}] Saving user message to database`);
     const saveMessageStart = Date.now();
     await saveMessages({
       messages: [
@@ -378,25 +378,25 @@ export async function POST(request: Request) {
         },
       ],
     });
-    console.log(`[${requestId}] User message saved in ${Date.now() - saveMessageStart}ms`);
+    logger.info(`[${requestId}] User message saved in ${Date.now() - saveMessageStart}ms`);
 
-    console.log(`[${requestId}] Setting up streaming`);
+    logger.info(`[${requestId}] Setting up streaming`);
     const streamId = generateUUID();
     await createStreamId({ streamId, chatId: id });
-    console.log(`[${requestId}] Stream ID created: ${streamId}`);
+    logger.info(`[${requestId}] Stream ID created: ${streamId}`);
 
-    console.log(`[${requestId}] Creating UI message stream with model: ${selectedChatModel}`);
+    logger.info(`[${requestId}] Creating UI message stream with model: ${selectedChatModel}`);
 
     let thingStreamFinished = false;
     const stream = createUIMessageStream({
       execute: async ({ writer: dataStream }) => {
-        console.log(`[${requestId}] Starting text streaming execution`);
+        logger.info(`[${requestId}] Starting text streaming execution`);
 
         try {
           const rawModelMessages = convertToModelMessages(filteredMessages);
           const modelMessages = cleanupIncompleteToolCalls(rawModelMessages);
           
-          console.log(`[${requestId}] Converted to model messages:`, {
+          logger.info(`[${requestId}] Converted to model messages:`, {
             messageCount: modelMessages.length,
             model: selectedChatModel,
             activeTools: selectedChatModel === 'chat-model-reasoning' ? [] : ['searchKnowledgePoints'],
@@ -404,14 +404,12 @@ export async function POST(request: Request) {
           });
           
           if (rawModelMessages.length !== modelMessages.length) {
-            console.log(`[${requestId}] 🔧 清理后消息数量变化: ${rawModelMessages.length} -> ${modelMessages.length}`);
+            logger.info(`[${requestId}] 🔧 清理后消息数量变化: ${rawModelMessages.length} -> ${modelMessages.length}`);
           }
-          
-          console.log(`[${requestId}] Model messages:`, JSON.stringify(modelMessages, null, 2));
 
           // Two-stage processing for reasoning model
           if (selectedChatModel === 'chat-model-reasoning') {
-            console.log(`[${requestId}] Starting two-stage reasoning process`);
+            logger.info(`[${requestId}] Starting two-stage reasoning process`);
 
             let reasoningText = '';
             let reasoningFinished = false;
@@ -432,7 +430,7 @@ export async function POST(request: Request) {
               );
 
               // Stage 1: Get reasoning without streaming to UI
-              console.log(`[${requestId}] Stage 1: Deep thinking with reasoner model`);
+              logger.info(`[${requestId}] Stage 1: Deep thinking with reasoner model`);
               const reasoningMessages = modelMessages.filter(x => x.role !== 'tool').map(x => {
                 if (x.role !== 'assistant') {
                   return x;
@@ -448,7 +446,7 @@ export async function POST(request: Request) {
                 }
                 return {role, content: filteredContent};
               });
-              console.log(`[${requestId}] Stage 1: Model messages:`, JSON.stringify(reasoningMessages, null, 2));
+              logger.info(`[${requestId}] Stage 1: Model messages:`, JSON.stringify(reasoningMessages, null, 2));
               const reasoningResult = streamText({
                 model: myProvider.languageModel('chat-model-reasoning'),
                 system: `你是一个专业的数学问题分析专家。请仔细分析用户的问题，制定详细的解决方案。
@@ -498,7 +496,7 @@ ${existingKnowledgePoints.join(', ')}
                   }
                   if (chunkType === 'text-delta') {
                     reasoningFinished = true;
-                    console.log(`[${requestId}] Stage 1 reasoning completed, total length: ${reasoningText.length}`);
+                    logger.info(`[${requestId}] Stage 1 reasoning completed, total length: ${reasoningText.length}`);
                   }
                 },
                 onError: (error) => {
@@ -508,7 +506,7 @@ ${existingKnowledgePoints.join(', ')}
               });
 
               // Consume the reasoning stream to trigger onChunk callbacks
-              console.log(`[${requestId}] Consuming reasoning stream`);
+              logger.info(`[${requestId}] Consuming reasoning stream`);
               reasoningResult.consumeStream();
 
               // Wait for reasoning to complete with timeout (max 10 minutes)
@@ -518,16 +516,16 @@ ${existingKnowledgePoints.join(', ')}
               while (!reasoningFinished && !thingStreamFinished) {
                 const elapsed = Date.now() - startTime;
                 if (elapsed >= reasoningTimeout) {
-                  console.log(`[${requestId}] Reasoning timeout reached (10 minutes), proceeding to next stage`);
+                  logger.info(`[${requestId}] Reasoning timeout reached (10 minutes), proceeding to next stage`);
                   reasoningFinished = true;
                   break;
                 }
-                console.log(`[${requestId}] Waiting for reasoning to finish (${Math.floor(elapsed / 1000)}s elapsed)`);
+                logger.info(`[${requestId}] Waiting for reasoning to finish (${Math.floor(elapsed / 1000)}s elapsed)`);
                 await new Promise(resolve => setTimeout(resolve, 1000));
               }
 
               if (thingStreamFinished) {
-                console.log(`[${requestId}] Stream finished, skipping rest of the process`);
+                logger.info(`[${requestId}] Stream finished, skipping rest of the process`);
                 return;
               }
 
@@ -544,10 +542,10 @@ ${existingKnowledgePoints.join(', ')}
                 })
               );
 
-              console.log(`[${requestId}] Stage 1 completed, reasoning length: ${reasoningText.length}`);
+              logger.info(`[${requestId}] Stage 1 completed, reasoning length: ${reasoningText.length}`);
 
               // Stage 2: Execute with tools and stream everything (reasoning + response)
-              console.log(`[${requestId}] Stage 2: Executing with tools based on reasoning`);
+              logger.info(`[${requestId}] Stage 2: Executing with tools based on reasoning`);
               const enhancedSystemPrompt = systemPrompt({
                 selectedChatModel: 'chat-model', // Use regular chat model for stage 2
                 requestHints,
@@ -555,7 +553,7 @@ ${existingKnowledgePoints.join(', ')}
                 reasoningContext: reasoningText // Pass reasoning as context
               });
 
-              console.log(`[${requestId}] Enhanced system prompt:`, enhancedSystemPrompt);
+              logger.info(`[${requestId}] Enhanced system prompt:`, enhancedSystemPrompt);
 
               const result = streamText({
                 model: myProvider.languageModel('chat-model'),
@@ -577,10 +575,10 @@ ${existingKnowledgePoints.join(', ')}
                 },
               });
 
-              console.log(`[${requestId}] Two-stage StreamText result created, consuming stream`);
+              logger.info(`[${requestId}] Two-stage StreamText result created, consuming stream`);
               result.consumeStream();
 
-              console.log(`[${requestId}] Streaming response (reasoning already streamed)`);
+              logger.info(`[${requestId}] Streaming response (reasoning already streamed)`);
 
               // Merge the main response stream (reasoning was already streamed incrementally)
               dataStream.merge(
@@ -597,7 +595,7 @@ ${existingKnowledgePoints.join(', ')}
               });
 
               // Fallback to single-stage processing with regular chat model
-              console.log(`[${requestId}] Fallback: Using single-stage chat-model processing`);
+              logger.info(`[${requestId}] Fallback: Using single-stage chat-model processing`);
 
               const result = streamText({
                 model: myProvider.languageModel('chat-model'),
@@ -623,10 +621,10 @@ ${existingKnowledgePoints.join(', ')}
                 },
               });
 
-              console.log(`[${requestId}] Fallback StreamText result created, consuming stream`);
+              logger.info(`[${requestId}] Fallback StreamText result created, consuming stream`);
               result.consumeStream();
 
-              console.log(`[${requestId}] Merging fallback result stream with data stream`);
+              logger.info(`[${requestId}] Merging fallback result stream with data stream`);
               dataStream.merge(
                 result.toUIMessageStream({
                   sendReasoning: true,
@@ -636,7 +634,7 @@ ${existingKnowledgePoints.join(', ')}
 
           } else {
             // Single-stage processing for regular models
-            console.log(`[${requestId}] Single-stage processing with model: ${selectedChatModel}`);
+            logger.info(`[${requestId}] Single-stage processing with model: ${selectedChatModel}`);
 
             const result = streamText({
               model: myProvider.languageModel(selectedChatModel!),
@@ -662,10 +660,10 @@ ${existingKnowledgePoints.join(', ')}
               },
             });
 
-            console.log(`[${requestId}] StreamText result created, consuming stream`);
+            logger.info(`[${requestId}] StreamText result created, consuming stream`);
             result.consumeStream();
 
-            console.log(`[${requestId}] Merging result stream with data stream`);
+            logger.info(`[${requestId}] Merging result stream with data stream`);
             dataStream.merge(
               result.toUIMessageStream({
                 sendReasoning: true,
@@ -673,7 +671,7 @@ ${existingKnowledgePoints.join(', ')}
             );
           }
           
-          console.log(`[${requestId}] Stream execution setup completed`);
+          logger.info(`[${requestId}] Stream execution setup completed`);
         } catch (error) {
           console.error(`[${requestId}] Error in stream execution:`, {
             error: error instanceof Error ? error.message : String(error),
@@ -686,8 +684,7 @@ ${existingKnowledgePoints.join(', ')}
       },
       generateId: generateUUID,
       onFinish: async ({ messages }) => {
-        console.log('messages', messages);
-        console.log(`[${requestId}] Stream finished, saving ${messages.length} AI messages`);
+        logger.info(`[${requestId}] Stream finished, saving ${messages.length} AI messages`);
         const saveAIStart = Date.now();
         thingStreamFinished = true;
         try {
@@ -702,10 +699,10 @@ ${existingKnowledgePoints.join(', ')}
             })),
           });
           
-          console.log(`[${requestId}] AI messages saved in ${Date.now() - saveAIStart}ms`);
+          logger.info(`[${requestId}] AI messages saved in ${Date.now() - saveAIStart}ms`);
           
           const totalTime = Date.now() - startTime;
-          console.log(`[${requestId}] Chat request completed successfully in ${totalTime}ms`);
+          logger.info(`[${requestId}] Chat request completed successfully in ${totalTime}ms`);
         } catch (error) {
           console.error(`[${requestId}] Error saving AI messages:`, {
             error: error instanceof Error ? error.message : String(error),
@@ -730,18 +727,18 @@ ${existingKnowledgePoints.join(', ')}
       },
     });
 
-    console.log(`[${requestId}] Setting up stream response`);
+    logger.info(`[${requestId}] Setting up stream response`);
     const streamContext = getStreamContext();
 
     if (streamContext) {
-      console.log(`[${requestId}] Using resumable stream context`);
+      logger.info(`[${requestId}] Using resumable stream context`);
       return new Response(
         await streamContext.resumableStream(streamId, () =>
           stream.pipeThrough(new JsonToSseTransformStream()),
         ),
       );
     } else {
-      console.log(`[${requestId}] Using direct stream response`);
+      logger.info(`[${requestId}] Using direct stream response`);
       return new Response(stream.pipeThrough(new JsonToSseTransformStream()));
     }
   } catch (error) {
@@ -779,37 +776,37 @@ export async function DELETE(request: Request) {
   const requestId = generateUUID().slice(0, 8);
   const startTime = Date.now();
   
-  console.log(`[${requestId}] Chat DELETE request started`);
+  logger.info(`[${requestId}] Chat DELETE request started`);
   
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
-    console.log(`[${requestId}] Delete request for chat ID: ${id}`);
+    logger.info(`[${requestId}] Delete request for chat ID: ${id}`);
 
     if (!id) {
       console.warn(`[${requestId}] DELETE request missing chat ID`);
       return new ChatSDKError('bad_request:api').toResponse();
     }
 
-    console.log(`[${requestId}] Authenticating user for DELETE`);
+    logger.info(`[${requestId}] Authenticating user for DELETE`);
     const authStart = Date.now();
     const session = await auth();
-    console.log(`[${requestId}] Authentication completed in ${Date.now() - authStart}ms`);
+    logger.info(`[${requestId}] Authentication completed in ${Date.now() - authStart}ms`);
 
     if (!session?.user) {
       console.warn(`[${requestId}] Unauthorized DELETE attempt for chat: ${id}`);
       return new ChatSDKError('unauthorized:chat').toResponse();
     }
 
-    console.log(`[${requestId}] Loading chat for deletion check`, {
+    logger.info(`[${requestId}] Loading chat for deletion check`, {
       chatId: id,
       userId: session.user.id
     });
 
     const chatLoadStart = Date.now();
     const chat = await getChatById({ id });
-    console.log(`[${requestId}] Chat loaded in ${Date.now() - chatLoadStart}ms`, {
+    logger.info(`[${requestId}] Chat loaded in ${Date.now() - chatLoadStart}ms`, {
       chatExists: !!chat,
       chatUserId: chat?.userId
     });
@@ -823,13 +820,13 @@ export async function DELETE(request: Request) {
       return new ChatSDKError('forbidden:chat').toResponse();
     }
 
-    console.log(`[${requestId}] Deleting chat`);
+    logger.info(`[${requestId}] Deleting chat`);
     const deleteStart = Date.now();
     const deletedChat = await deleteChatById({ id });
-    console.log(`[${requestId}] Chat deleted in ${Date.now() - deleteStart}ms`);
+    logger.info(`[${requestId}] Chat deleted in ${Date.now() - deleteStart}ms`);
 
     const totalTime = Date.now() - startTime;
-    console.log(`[${requestId}] DELETE request completed successfully in ${totalTime}ms`);
+    logger.info(`[${requestId}] DELETE request completed successfully in ${totalTime}ms`);
 
     return Response.json(deletedChat, { status: 200 });
   } catch (error) {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/app/(auth)/auth';
 import { logError, createErrorResponse } from '@/lib/api-error-handler';
+import { logger } from '@/lib/logger';
 
 // Helper function to get MIME type from URL
 function getImageMimeType(url: string): string {
@@ -35,7 +36,7 @@ async function fetchImageAsBase64(imageUrl: string): Promise<{ base64: string; m
 }
 
 export async function POST(request: Request) {
-  console.log('ocr request');
+  logger.info('ocr request');
   const endpoint = '/api/ocr';
   const method = 'POST';
 
@@ -61,7 +62,7 @@ export async function POST(request: Request) {
     }
 
     // Fetch image and convert to base64
-    console.log(`🚀 正在识别图片文字: ${imageUrl}`);
+    logger.info(`🚀 正在识别图片文字: ${imageUrl}`);
     // Prepare the request to OpenRouter API with base64 encoded image
     const ocrPayload = {
       model: "doubao-seed-1-6-vision-250815",
@@ -98,29 +99,29 @@ export async function POST(request: Request) {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      console.log(`🔴 API request failed: ${response.status}`);
-      console.log(`🔴 API error data: ${JSON.stringify(errorData)}`);
+      logger.info(`🔴 API request failed: ${response.status}`);
+      logger.info(`🔴 API error data: ${JSON.stringify(errorData)}`);
       const errorMessage = errorData.error?.message || `API request failed: ${response.status}`;
-      console.log(`🔴 Error message: ${errorMessage}`);
+      logger.info(`🔴 Error message: ${errorMessage}`);
       return NextResponse.json({ error: errorMessage }, { status: response.status });
     }
 
     const result = await response.json();
 
-    console.log(`🔴 API response: ${JSON.stringify(result.choices[0].message)}`);
+    logger.info(`🔴 API response: ${JSON.stringify(result.choices[0].message)}`);
 
     if (result.choices && result.choices.length > 0) {
       const content = result.choices[0].message.content;
       
-      console.log(`✅ 识别成功!`);
-      console.log(`📝 识别结果: ${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`);
-      console.log(`🤖 使用模型: ${result.model || 'openai/gpt-5'}`);
+      logger.info(`✅ 识别成功!`);
+      logger.info(`📝 识别结果: ${content.substring(0, 100)}${content.length > 100 ? '...' : ''}`);
+      logger.info(`🤖 使用模型: ${result.model || 'openai/gpt-5'}`);
       
       if (result.usage) {
-        console.log(`💰 Token使用情况:`);
-        console.log(`   输入: ${result.usage.prompt_tokens || 0}`);
-        console.log(`   输出: ${result.usage.completion_tokens || 0}`);
-        console.log(`   总计: ${result.usage.total_tokens || 0}`);
+        logger.info(`💰 Token使用情况:`);
+        logger.info(`   输入: ${result.usage.prompt_tokens || 0}`);
+        logger.info(`   输出: ${result.usage.completion_tokens || 0}`);
+        logger.info(`   总计: ${result.usage.total_tokens || 0}`);
       }
       
       return NextResponse.json({
@@ -130,7 +131,7 @@ export async function POST(request: Request) {
         usage: result.usage || {}
       });
     } else {
-      console.log(`❌ API响应中没有找到内容`);
+      logger.info(`❌ API响应中没有找到内容`);
       return NextResponse.json({ error: 'No content found in API response' }, { status: 500 });
     }
 
