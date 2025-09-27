@@ -2,14 +2,18 @@
 """
 ChromaDB 向量导出脚本
 从 ChromaDB 中拉取所有向量数据，包括文档内容、元数据等信息（不包含向量嵌入）
+支持定时导出模式，每10分钟自动导出数据到JSON文件
 """
 import asyncio
 import sys
 import os
 import argparse
 import json
+import signal
+import time
 from typing import List, Dict, Any, Optional
 from datetime import datetime
+from pathlib import Path
 
 # 添加项目根目录到路径
 sys.path.append('.')
@@ -32,6 +36,8 @@ class VectorExporter:
         self.host = host
         self.port = port
         self._client = None
+        self._running = False
+        self._stop_event = asyncio.Event()
         
     async def _get_client(self):
         """获取或创建 ChromaDB 客户端"""
@@ -251,8 +257,117 @@ class VectorExporter:
             logger.error(f"导出所有向量失败: {e}")
             raise
     
+    def stop(self):
+        """停止定时导出"""
+        self._running = False
+        self._stop_event.set()
+    
+    async def scheduled_export(
+        self, 
+        output_dir: str = "./exports",
+        collection_names: Optional[List[str]] = None,
+        batch_size: int = 1000,
+        interval_minutes: int = 10
+    ):
+        """
+        定时导出向量数据
+        
+        Args:
+            output_dir: 输出目录
+            collection_names: 要导出的集合名称列表
+            batch_size: 批处理大小
+            interval_minutes: 导出间隔（分钟）
+        """
+        self._running = True
+        
+        # 创建输出目录
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        
+        logger.info(f"🚀 开始定时导出任务")
+        logger.info(f"   导出目录: {output_path.absolute()}")
+        logger.info(f"   导出间隔: {interval_minutes} 分钟")
+        logger.info(f"   ChromaDB: {self.host}:{self.port}")
+        
+        export_count = 0
+        
+        while self._running:
+            try:
+                export_count += 1
+                start_time = datetime.now()
+                
+                logger.info(f"📊 开始第 {export_count} 次导出 ({start_time.strftime('%Y-%m-%d %H:%M:%S')})")
+                
+                # 导出数据
+                results = await self.export_all_vectors(
+                    collection_names=collection_names,
+                    batch_size=batch_size
+                )
+                
+                # 生成文件名（包含时间戳）
+                timestamp = start_time.strftime("%Y%m%d_%H%M%S")
+                filename = f"chromadb_export_{timestamp}.json"
+                filepath = output_path / filename
+                
+                # 构建导出数据结构
+                export_data = {
+                    "export_info": {
+                        "timestamp": start_time.isoformat(),
+                        "export_count": export_count,
+                        "chromadb_host": self.host,
+                        "chromadb_port": self.port,
+                        "total_collections": len(results),
+                        "total_vectors": sum(len(vectors) for vectors in results.values())
+                    },
+                    "collections": results
+                }
+                
+                # 写入JSON文件
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    json.dump(export_data, f, ensure_ascii=False, indent=2)
+                
+                end_time = datetime.now()
+                duration = (end_time - start_time).total_seconds()
+                
+                logger.info(f"✅ 第 {export_count} 次导出完成")
+                logger.info(f"   文件: {filename}")
+                logger.info(f"   大小: {filepath.stat().st_size / 1024 / 1024:.2f} MB")
+                logger.info(f"   耗时: {duration:.2f} 秒")
+                logger.info(f"   集合数: {export_data['export_info']['total_collections']}")
+                logger.info(f"   向量数: {export_data['export_info']['total_vectors']}")
+                
+                # 等待下次导出或停止信号
+                if self._running:
+                    logger.info(f"⏰ 等待 {interval_minutes} 分钟后进行下次导出...")
+                    try:
+                        await asyncio.wait_for(
+                            self._stop_event.wait(), 
+                            timeout=interval_minutes * 60
+                        )
+                        # 如果收到停止信号，退出循环
+                        if self._stop_event.is_set():
+                            break
+                    except asyncio.TimeoutError:
+                        # 超时是正常的，继续下次导出
+                        pass
+                
+            except Exception as e:
+                logger.error(f"❌ 第 {export_count} 次导出失败: {e}")
+                # 出错时等待较短时间后重试
+                if self._running:
+                    logger.info("⏰ 等待 1 分钟后重试...")
+                    try:
+                        await asyncio.wait_for(self._stop_event.wait(), timeout=60)
+                        if self._stop_event.is_set():
+                            break
+                    except asyncio.TimeoutError:
+                        pass
+        
+        logger.info(f"🛑 定时导出任务已停止，共完成 {export_count} 次导出")
+    
     async def close(self):
         """关闭连接"""
+        self.stop()
         if self._client:
             # ChromaDB 客户端通常不需要显式关闭
             self._client = None
@@ -371,16 +486,22 @@ def parse_arguments():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 使用示例:
-  # 导出所有集合的向量数据（摘要格式）
+  # 一次性导出所有集合的向量数据（摘要格式）
   python export_vectors.py
+  
+  # 定时导出模式：每10分钟导出一次到JSON文件
+  python export_vectors.py --scheduled
+  
+  # 自定义定时导出间隔和输出目录
+  python export_vectors.py --scheduled --interval 5 --output-dir /path/to/exports
   
   # 指定 ChromaDB 服务器
   python export_vectors.py --host localhost --port 8000
   
-  # 只导出特定集合
-  python export_vectors.py --collections math_knowledge
+  # 只导出特定集合（定时模式）
+  python export_vectors.py --scheduled --collections math_knowledge
   
-  # 详细格式显示完整内容和元数据
+  # 详细格式显示完整内容和元数据（一次性导出）
   python export_vectors.py --format table
   
   # 输出为 JSON 格式（包含所有数据）
@@ -388,9 +509,6 @@ def parse_arguments():
   
   # 输出为 CSV 格式
   python export_vectors.py --format csv --output vectors.csv
-  
-  # 摘要格式（默认）
-  python export_vectors.py --format summary
         """
     )
     
@@ -438,6 +556,25 @@ def parse_arguments():
         help="静默模式，只输出结果"
     )
     
+    parser.add_argument(
+        "--scheduled",
+        action="store_true",
+        help="启用定时导出模式，每10分钟导出一次到JSON文件"
+    )
+    
+    parser.add_argument(
+        "--output-dir",
+        default="./exports",
+        help="定时导出模式的输出目录 (默认: ./exports)"
+    )
+    
+    parser.add_argument(
+        "--interval",
+        type=int,
+        default=10,
+        help="定时导出间隔（分钟） (默认: 10)"
+    )
+    
     return parser.parse_args()
 
 
@@ -458,57 +595,89 @@ async def main():
         print("=" * 50)
         print(f"服务器: {args.host}:{args.port}")
         print(f"集合: {args.collections if args.collections else '所有集合'}")
-        print(f"输出格式: {args.format}")
+        if args.scheduled:
+            print(f"模式: 定时导出 (每 {args.interval} 分钟)")
+            print(f"输出目录: {args.output_dir}")
+        else:
+            print(f"模式: 一次性导出")
+            print(f"输出格式: {args.format}")
         print(f"批处理大小: {args.batch_size}")
         print("")
     
+    # 创建导出器
+    exporter = VectorExporter(host=args.host, port=args.port)
+    
+    # 设置信号处理器用于优雅退出
+    def signal_handler(signum, frame):
+        logger.info("收到退出信号，正在停止...")
+        exporter.stop()
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
     try:
-        # 创建导出器
-        exporter = VectorExporter(host=args.host, port=args.port)
-        
-        try:
-            # 导出向量数据
-            results = await exporter.export_all_vectors(
+        if args.scheduled:
+            # 定时导出模式
+            if not args.quiet:
+                print("🔄 启动定时导出模式...")
+                print("按 Ctrl+C 停止导出")
+                print("")
+            
+            await exporter.scheduled_export(
+                output_dir=args.output_dir,
                 collection_names=args.collections,
-                batch_size=args.batch_size
+                batch_size=args.batch_size,
+                interval_minutes=args.interval
             )
-            
-            # 格式化输出
-            output_text = format_output(results, args.format)
-            
-            # 输出结果
-            if args.output:
-                with open(args.output, 'w', encoding='utf-8') as f:
-                    f.write(output_text)
+        else:
+            # 一次性导出模式
+            try:
+                # 导出向量数据
+                results = await exporter.export_all_vectors(
+                    collection_names=args.collections,
+                    batch_size=args.batch_size
+                )
+                
+                # 格式化输出
+                output_text = format_output(results, args.format)
+                
+                # 输出结果
+                if args.output:
+                    with open(args.output, 'w', encoding='utf-8') as f:
+                        f.write(output_text)
+                    if not args.quiet:
+                        print(f"\n✅ 结果已保存到: {args.output}")
+                else:
+                    print(output_text)
+                
                 if not args.quiet:
-                    print(f"\n✅ 结果已保存到: {args.output}")
-            else:
-                print(output_text)
+                    # 统计信息
+                    total_collections = len(results)
+                    total_vectors = sum(len(vectors) for vectors in results.values())
+                    print(f"\n📊 导出统计:")
+                    print(f"   集合数量: {total_collections}")
+                    print(f"   向量总数: {total_vectors}")
+                    print(f"   完成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            
+            finally:
+                await exporter.close()
             
             if not args.quiet:
-                # 统计信息
-                total_collections = len(results)
-                total_vectors = sum(len(vectors) for vectors in results.values())
-                print(f"\n📊 导出统计:")
-                print(f"   集合数量: {total_collections}")
-                print(f"   向量总数: {total_vectors}")
-                print(f"   完成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        
-        finally:
-            await exporter.close()
-        
-        if not args.quiet:
-            print("\n🎉 导出完成!")
+                print("\n🎉 导出完成!")
             
     except KeyboardInterrupt:
-        print("\n⏹️  用户中断了导出过程")
-        sys.exit(1)
+        if args.scheduled:
+            print("\n⏹️  定时导出已停止")
+        else:
+            print("\n⏹️  用户中断了导出过程")
     except Exception as e:
         logger.error(f"💥 导出过程中发生错误: {e}")
         if not args.quiet:
             import traceback
             traceback.print_exc()
         sys.exit(1)
+    finally:
+        await exporter.close()
 
 
 if __name__ == "__main__":
