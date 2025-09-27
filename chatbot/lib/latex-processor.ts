@@ -11,15 +11,46 @@
 export function preprocessLatex(content: string): string {
   if (!content) return '';
   
-  return content
+  // 特殊处理：如果chunk只包含 \[ 或 \]，不要转换
+  const trimmedContent = content.trim();
+  if (trimmedContent === '\\[' || trimmedContent === '\\]') {
+    return content;
+  }
+  
+  // 特殊处理：如果chunk以 \[ 开头但没有 \]，不要转换
+  if (content.trim().startsWith('\\[') && !content.includes('\\]')) {
+    return content;
+  }
+  
+  // 特殊处理：如果chunk以 \] 结尾但没有 \[，不要转换
+  if (content.trim().endsWith('\\]') && !content.includes('\\[')) {
+    return content;
+  }
+  
+  // 特殊处理：如果chunk只包含 \]，不要转换
+  if (content.trim() === '\\]') {
+    return content;
+  }
+  
+  const result = content
+    // 首先处理 \[ \] 为完整的 $$ $$ 格式 - 使用更宽松的匹配
+    .replace(/\\\[([\s\S]*?)\\\]/g, (match, content) => {
+      // 移除内容中的多余换行，但保留必要的空格
+      const processedContent = content
+        .replace(/^\s*\n+/, '') // 移除开头的换行
+        .replace(/\n+\s*$/, '') // 移除结尾的换行
+        .replace(/\n\s*\n/g, ' ') // 将多个换行替换为单个空格
+        .replace(/\n/g, ' '); // 将剩余的换行替换为空格
+      return `\n$$${processedContent}$$\n`;
+    })
     // 处理 align* 环境 - 转换为 aligned (KaTeX 更好支持)
     .replace(/\\begin\{align\*\}([\s\S]*?)\\end\{align\*\}/g, '\n$$\\begin{aligned}$1\\end{aligned}$$\n')
     // 处理其他 LaTeX 环境
     .replace(/\\begin\{(equation\*?|gather\*?|multline\*?)\}/g, '\n$$\\begin{$1}')
     .replace(/\\end\{(equation\*?|gather\*?|multline\*?)\}/g, '\\end{$1}$$\n')
-    // 替换 \[ \] 为 $$ $$ (块级数学公式)
-    .replace(/\\\[/g, '\n$$')
-    .replace(/\\\]/g, '$$\n')
+    // 处理单独的 \[ 和 \] 标记（如果上面没有匹配到）
+    .replace(/\\\[/g, '$$')
+    .replace(/\\\]/g, '$$')
     // 替换 \( \) 为 $ $ (行内数学公式)
     .replace(/\\\(/g, '$')
     .replace(/\\\)/g, '$')
@@ -32,6 +63,7 @@ export function preprocessLatex(content: string): string {
     .replace(/([ABCD]\.\s*[^\n]*?)\s+([ABCD]\.\s*)/g, '$1\n$2')
     // 额外处理：确保选项和前面的内容之间有换行
     .replace(/([，。！？])\s*([ABCD]\.\s*)/g, '$1\n$2');
+  return result;
 }
 
 /**

@@ -83,7 +83,8 @@ const LazyMarkdownRenderer = memo(({ content }: { content: string }) => {
               remarkPlugins={[
                 remarkGfm,
                 [remarkMath, { 
-                  singleDollarTextMath: true
+                  singleDollarTextMath: true,
+                  doubleDollarTextMath: true
                 }]
               ]}
               rehypePlugins={[

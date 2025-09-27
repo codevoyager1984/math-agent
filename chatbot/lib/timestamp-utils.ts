@@ -20,20 +20,6 @@ export function formatRelativeTime(timestamp: Date | string | number): string {
   const diffHours = Math.floor(diffMinutes / 60);
   const diffDays = Math.floor(diffHours / 24);
   
-  // Debug logging for development
-  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
-    console.log('Timestamp debug:', {
-      timestamp,
-      date: date.toISOString(),
-      now: now.toISOString(),
-      diffMs,
-      diffSeconds,
-      diffMinutes,
-      diffHours,
-      diffDays
-    });
-  }
-  
   // If more than 30 days, show the actual date
   if (diffDays > 30) {
     return date.toLocaleDateString('zh-CN', {

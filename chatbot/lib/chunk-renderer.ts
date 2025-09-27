@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useEffect } from 'react';
 
-export const LINES_PER_CHUNK = 10;
+export const LINES_PER_CHUNK = 50;
 
 /**
  * Check if a line is part of a LaTeX math block
@@ -31,6 +31,16 @@ function isInMathBlock(line: string, mathBlockState: { inBlock: boolean; blockTy
     mathBlockState.blockType = '\\[';
   }
   if (line.includes('\\]') && mathBlockState.blockType === '\\[') {
+    mathBlockState.inBlock = false;
+    mathBlockState.blockType = '';
+  }
+  
+  // Check for LaTeX \( \) delimiters (inline math)
+  if (line.includes('\\(')) {
+    mathBlockState.inBlock = true;
+    mathBlockState.blockType = '\\(';
+  }
+  if (line.includes('\\)') && mathBlockState.blockType === '\\(') {
     mathBlockState.inBlock = false;
     mathBlockState.blockType = '';
   }
