@@ -3,23 +3,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { BookOpenIcon, TagIcon, LoaderIcon, AlertCircleIcon, XIcon } from 'lucide-react';
+import { BookOpenIcon, TagIcon, LoaderIcon, AlertCircleIcon, XIcon, ExternalLinkIcon } from 'lucide-react';
 import { Badge } from './ui/badge';
+import { Button } from './ui/button';
 import { useTranslation } from 'react-i18next';
 import { Response } from './elements/response';
-
-interface KnowledgePoint {
-  id: string;
-  title: string;
-  description: string;
-  category: string;
-  examples: Array<{
-    question: string;
-    solution: string;
-    difficulty: string;
-  }>;
-  tags: string[];
-}
+import { KnowledgePoint, getKnowledgePoint } from '@/lib/knowledge-api';
 
 interface KnowledgeTooltipProps {
   knowledgeId: string;
@@ -50,38 +39,27 @@ export function KnowledgeTooltip({ knowledgeId, displayText }: KnowledgeTooltipP
     setError(null);
 
     try {
-      const ragServerUrl = 'https://math-rag-server.farmbot.me';
-      const response = await fetch(`${ragServerUrl}/api/knowledge-base/documents/${id}`);
+      const knowledgePoint = await getKnowledgePoint(id);
       
-      if (!response.ok) {
-        throw new Error(t('knowledge.knowledgePointNotFound'));
-      }
-
-      const data = await response.json();
-      const knowledgePoint: KnowledgePoint = {
-        id: data.id,
-        title: data.title,
-        description: data.description,
-        category: data.category,
-        examples: data.examples || [],
-        tags: data.tags || []
-      };
-
       // 缓存结果
       knowledgeCache.set(id, knowledgePoint);
       setKnowledge(knowledgePoint);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('knowledge.failedToFetchKnowledge'));
+      const errorMessage = err instanceof Error ? err.message : t('knowledge.failedToFetchKnowledge');
+      // 如果是"知识点不存在"的错误，使用本地化消息
+      if (errorMessage === '知识点不存在') {
+        setError(t('knowledge.knowledgePointNotFound'));
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleClick = () => {
-    setIsOpen(true);
-    if (!knowledge && !isLoading && !error) {
-      fetchKnowledgePoint(knowledgeId);
-    }
+    // 直接跳转到详情页面
+    window.open(`/knowledge/${knowledgeId}`, '_blank', 'noopener,noreferrer');
   };
 
   const handleClose = () => {
@@ -200,9 +178,9 @@ export function KnowledgeTooltip({ knowledgeId, displayText }: KnowledgeTooltipP
                     <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
                       <p 
                         className="text-xs text-blue-600 dark:text-blue-400 font-medium cursor-pointer hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
-                        onClick={handleClick}
+                        onClick={() => window.open(`/knowledge/${knowledgeId}`, '_blank', 'noopener,noreferrer')}
                       >
-                        💡 点击查看详细内容和例题
+                        📖 点击标签可跳转到详情页面
                       </p>
                     </div>
                   </div>
@@ -241,12 +219,26 @@ export function KnowledgeTooltip({ knowledgeId, displayText }: KnowledgeTooltipP
                   <BookOpenIcon className="size-6 text-blue-600" />
                   <h2 className="text-xl font-semibold text-gray-900 dark:text-white">知识点详情</h2>
                 </div>
-                <button
-                  onClick={handleClose}
-                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
-                >
-                  <XIcon className="size-5 text-gray-500" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      window.open(`/knowledge/${knowledgeId}`, '_blank', 'noopener,noreferrer');
+                      handleClose();
+                    }}
+                    className="text-xs"
+                  >
+                    <ExternalLinkIcon className="size-4" />
+                    详情页面
+                  </Button>
+                  <button
+                    onClick={handleClose}
+                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
+                  >
+                    <XIcon className="size-5 text-gray-500" />
+                  </button>
+                </div>
               </div>
 
               {/* Content */}
