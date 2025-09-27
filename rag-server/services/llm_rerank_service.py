@@ -175,7 +175,6 @@ class LLMRerankService:
             # 3. 调用大模型
             llm_start = time.time()
             try:
-                logger.info(f"[{request_id}] LLM prompt: {prompt}")
                 response = await self.ai_service.generate_response(
                     prompt=prompt,
                     temperature=0.1,  # 低温度确保一致性
