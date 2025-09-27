@@ -10,7 +10,7 @@
  */
 export function preprocessLatex(content: string): string {
   if (!content) return '';
-    
+     
   // 特殊处理：如果chunk只包含 \[ 或 \]，不要转换
   const trimmedContent = content.trim();
   if (trimmedContent === '\\[' || trimmedContent === '\\]') {
@@ -35,16 +35,15 @@ export function preprocessLatex(content: string): string {
   const result = content
     // 首先处理 \[ \] 为完整的 $$ $$ 格式 - 使用更宽松的匹配
     .replace(/\\\[([\s\S]*?)\\\]/g, (match, content) => {
-      
       // 特殊处理 aligned 环境
       if (content.includes('\\begin{aligned}') && content.includes('\\end{aligned}')) {
-        // 对于 aligned 环境，保留换行但清理格式
+        // 对于 aligned 环境，需要保留完整的换行结构以便KaTeX正确渲染多行公式
         const processedContent = content
           .replace(/^\s*\n+/, '') // 移除开头的换行
           .replace(/\n+\s*$/, '') // 移除结尾的换行
-          .replace(/\\\s+/g, '\\\\') // 清理 \\ 后的空格
-          .replace(/\n\s*/g, '\n'); // 清理行首空格
-        return `\n$$${processedContent}$$\n`;
+          .replace(/\\\\\s*\n\s*/g, '\\\\\\n') // 保留 \\ 后的换行，KaTeX需要这个来正确解析多行
+          .replace(/\n\s+/g, '\n'); // 清理行首多余的空格但保留换行
+        return `\n$$\n${processedContent}\n$$\n`;
       } else {
         // 对于其他内容，移除内容中的多余换行，但保留必要的空格
         const processedContent = content
