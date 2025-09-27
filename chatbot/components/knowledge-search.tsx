@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Response } from './elements/response';
+import { OptimizedResponse } from './elements/optimized-response';
 
 interface KnowledgePoint {
   id: string;
@@ -194,9 +195,9 @@ export const KnowledgeSearch = memo(function KnowledgeSearch({
                       </div>
                     </div>
                     <div className="mt-1">
-                      <Response className="text-xm text-muted-foreground">
+                      <OptimizedResponse className="text-xm text-muted-foreground">
                         {displayDescription}
-                      </Response>
+                      </OptimizedResponse>
                     </div>
                   </div>
                   
