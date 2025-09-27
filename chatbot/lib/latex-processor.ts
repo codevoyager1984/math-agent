@@ -11,9 +11,12 @@
 export function preprocessLatex(content: string): string {
   if (!content) return '';
   
+  console.log('🔍 Preprocessing LaTeX chunk:', content);
+  
   // 特殊处理：如果chunk只包含 \[ 或 \]，不要转换
   const trimmedContent = content.trim();
   if (trimmedContent === '\\[' || trimmedContent === '\\]') {
+    console.log('🔍 Skipping isolated LaTeX delimiter:', trimmedContent);
     return content;
   }
   
@@ -35,16 +38,45 @@ export function preprocessLatex(content: string): string {
   const result = content
     // 首先处理 \[ \] 为完整的 $$ $$ 格式 - 使用更宽松的匹配
     .replace(/\\\[([\s\S]*?)\\\]/g, (match, content) => {
-      // 移除内容中的多余换行，但保留必要的空格
-      const processedContent = content
-        .replace(/^\s*\n+/, '') // 移除开头的换行
-        .replace(/\n+\s*$/, '') // 移除结尾的换行
-        .replace(/\n\s*\n/g, ' ') // 将多个换行替换为单个空格
-        .replace(/\n/g, ' '); // 将剩余的换行替换为空格
-      return `\n$$${processedContent}$$\n`;
+      console.log('🔍 Processing \\[...\\] block:', content);
+      
+      // 特殊处理 aligned 环境
+      if (content.includes('\\begin{aligned}') && content.includes('\\end{aligned}')) {
+        console.log('🔍 Found aligned environment');
+        // 对于 aligned 环境，保留换行但清理格式
+        const processedContent = content
+          .replace(/^\s*\n+/, '') // 移除开头的换行
+          .replace(/\n+\s*$/, '') // 移除结尾的换行
+          .replace(/\\\s+/g, '\\\\') // 清理 \\ 后的空格
+          .replace(/\n\s*/g, '\n'); // 清理行首空格
+        console.log('🔍 Processed aligned content:', processedContent);
+        return `\n$$${processedContent}$$\n`;
+      } else {
+        console.log('🔍 Processing other LaTeX content');
+        // 对于其他内容，移除内容中的多余换行，但保留必要的空格
+        const processedContent = content
+          .replace(/^\s*\n+/, '') // 移除开头的换行
+          .replace(/\n+\s*$/, '') // 移除结尾的换行
+          .replace(/\n\s*\n/g, ' ') // 将多个换行替换为单个空格
+          .replace(/\n/g, ' '); // 将剩余的换行替换为空格
+        console.log('🔍 Processed other content:', processedContent);
+        return `\n$$${processedContent}$$\n`;
+      }
     })
     // 处理 align* 环境 - 转换为 aligned (KaTeX 更好支持)
     .replace(/\\begin\{align\*\}([\s\S]*?)\\end\{align\*\}/g, '\n$$\\begin{aligned}$1\\end{aligned}$$\n')
+    // 处理单个 $ 包围的 aligned 环境
+    .replace(/\$\\begin\{aligned\}([\s\S]*?)\\end\{aligned\}\$/g, (match, content) => {
+      console.log('🔍 Found $ aligned environment:', content);
+      // 清理 aligned 环境内容
+      const processedContent = content
+        .replace(/^\s*\n+/, '') // 移除开头的换行
+        .replace(/\n+\s*$/, '') // 移除结尾的换行
+        .replace(/\\\s+/g, '\\\\') // 清理 \\ 后的空格
+        .replace(/\n\s*/g, '\n'); // 清理行首空格
+      console.log('🔍 Processed $ aligned content:', processedContent);
+      return `\n$$\\begin{aligned}${processedContent}\\end{aligned}$$\n`;
+    })
     // 处理其他 LaTeX 环境
     .replace(/\\begin\{(equation\*?|gather\*?|multline\*?)\}/g, '\n$$\\begin{$1}')
     .replace(/\\end\{(equation\*?|gather\*?|multline\*?)\}/g, '\\end{$1}$$\n')
@@ -63,6 +95,8 @@ export function preprocessLatex(content: string): string {
     .replace(/([ABCD]\.\s*[^\n]*?)\s+([ABCD]\.\s*)/g, '$1\n$2')
     // 额外处理：确保选项和前面的内容之间有换行
     .replace(/([，。！？])\s*([ABCD]\.\s*)/g, '$1\n$2');
+    
+  console.log('🔍 Final processed LaTeX result:', result);
   return result;
 }
 
