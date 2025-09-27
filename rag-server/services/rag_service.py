@@ -914,6 +914,46 @@ class RAGService:
             logger.error(f"[{request_id}] 获取知识点名称失败: {e}")
             raise
 
+    async def get_knowledge_points_paginated(
+        self,
+        page: int = 1,
+        limit: int = 20,
+        category: Optional[str] = None,
+        request_id: Optional[str] = None
+    ) -> tuple[List[Dict[str, Any]], int]:
+        """
+        分页获取知识点列表（使用 Elasticsearch）
+
+        Args:
+            page: 页码，从1开始
+            limit: 每页数量
+            category: 分类筛选（可选）
+            request_id: 请求ID用于追踪
+
+        Returns:
+            (知识点列表, 总数量)
+        """
+        if not request_id:
+            request_id = str(uuid.uuid4())[:8]
+
+        try:
+            logger.info(f"[{request_id}] 分页获取知识点列表 - page: {page}, limit: {limit}, category: {category}")
+            
+            # 直接使用 Elasticsearch 服务获取分页数据
+            documents, total_count = await self.elasticsearch_service.get_documents_paginated(
+                page=page,
+                limit=limit,
+                category=category,
+                request_id=request_id
+            )
+            
+            logger.info(f"[{request_id}] 成功获取 {len(documents)} 个知识点，总计 {total_count} 个")
+            return documents, total_count
+
+        except Exception as e:
+            logger.error(f"[{request_id}] 分页获取知识点失败: {e}")
+            raise
+
     async def clear_knowledge_base(self, request_id: Optional[str] = None) -> bool:
         """
         清空知识库（清空 ChromaDB 和 Elasticsearch）

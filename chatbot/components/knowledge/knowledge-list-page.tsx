@@ -9,7 +9,7 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { OptimizedResponse } from '../elements/optimized-response';
-import { KnowledgePoint, getKnowledgePoints } from '@/lib/knowledge-api';
+import { KnowledgePoint, getKnowledgePoints, searchKnowledgePoints } from '@/lib/knowledge-api';
 
 // 分页组件
 interface PaginationProps {
@@ -198,44 +198,81 @@ export function KnowledgeListPage() {
       setLoading(true);
       setError(null);
 
-      // 如果有标签筛选，需要获取更多数据用于前端筛选
-      const limit = tag ? pageSize * 5 : pageSize;
-      
-      const response = await getKnowledgePoints({
-        page,
-        limit,
-        search: search || undefined,
-        category: category || undefined,
-      });
+      let response;
+      let filteredPoints: KnowledgePoint[] = [];
+      let totalCount = 0;
 
-      let filteredPoints = response.knowledge_points;
+      if (search.trim()) {
+        // 如果有搜索查询，使用 /query 接口进行智能搜索
+        const searchResults = await searchKnowledgePoints(search, {
+          n_results: 50, // 获取更多结果用于分页
+          search_mode: 'hybrid'
+        });
 
-      // 如果有标签筛选，在前端进行筛选
-      if (tag) {
-        filteredPoints = response.knowledge_points.filter(point => 
-          point.tags && point.tags.includes(tag)
-        );
-      }
+        // 应用分类筛选
+        let searchFilteredPoints = searchResults;
+        if (category) {
+          searchFilteredPoints = searchResults.filter(point => point.category === category);
+        }
 
-      // 如果使用了标签筛选，需要重新计算分页
-      if (tag) {
+        // 应用标签筛选
+        if (tag) {
+          searchFilteredPoints = searchFilteredPoints.filter(point => 
+            point.tags && point.tags.includes(tag)
+          );
+        }
+
+        filteredPoints = searchFilteredPoints;
+        totalCount = searchFilteredPoints.length;
+
         // 前端分页处理
         const startIndex = (page - 1) * pageSize;
         const endIndex = startIndex + pageSize;
         const paginatedPoints = filteredPoints.slice(startIndex, endIndex);
         
         setKnowledgePoints(paginatedPoints);
-        setTotalCount(filteredPoints.length);
-        setTotalPages(Math.ceil(filteredPoints.length / pageSize));
+        setTotalCount(totalCount);
+        setTotalPages(Math.ceil(totalCount / pageSize));
+
       } else {
-        // 后端分页，直接使用返回的数据
-        setKnowledgePoints(filteredPoints);
-        setTotalCount(response.total || filteredPoints.length);
-        setTotalPages(Math.ceil((response.total || filteredPoints.length) / pageSize));
+        // 没有搜索查询，使用 /documents 接口进行分页获取
+        const limit = tag ? pageSize * 5 : pageSize;
+        
+        response = await getKnowledgePoints({
+          page,
+          limit,
+          category: category || undefined,
+        });
+
+        filteredPoints = response.knowledge_points;
+
+        // 如果有标签筛选，在前端进行筛选
+        if (tag) {
+          filteredPoints = response.knowledge_points.filter(point => 
+            point.tags && point.tags.includes(tag)
+          );
+        }
+
+        // 如果使用了标签筛选，需要重新计算分页
+        if (tag) {
+          // 前端分页处理
+          const startIndex = (page - 1) * pageSize;
+          const endIndex = startIndex + pageSize;
+          const paginatedPoints = filteredPoints.slice(startIndex, endIndex);
+          
+          setKnowledgePoints(paginatedPoints);
+          setTotalCount(filteredPoints.length);
+          setTotalPages(Math.ceil(filteredPoints.length / pageSize));
+        } else {
+          // 后端分页，直接使用返回的数据
+          setKnowledgePoints(filteredPoints);
+          setTotalCount(response.total || filteredPoints.length);
+          setTotalPages(Math.ceil((response.total || filteredPoints.length) / pageSize));
+        }
       }
       
-      // 提取分类和标签（仅在首次加载时）
-      if (page === 1 && !search && !category && !tag) {
+      // 提取分类和标签（仅在首次加载时且无搜索时）
+      if (page === 1 && !search && !category && !tag && response) {
         setCategories(extractCategories(response.knowledge_points));
         setTags(extractTags(response.knowledge_points));
         // 重置标签展开状态

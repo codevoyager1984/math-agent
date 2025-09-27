@@ -20,7 +20,7 @@ class DocumentsAddRequest(BaseModel):
 class QueryRequest(BaseModel):
     """查询请求模型 - 支持混合搜索"""
     query: str = Field(..., description="查询文本")
-    n_results: int = Field(default=5, ge=1, le=20, description="返回结果数量")
+    n_results: int = Field(default=5, ge=1, le=100, description="返回结果数量")
     include_metadata: bool = Field(default=True, description="是否包含元数据")
 
     # 混合搜索参数（可选，保持向后兼容）
@@ -35,7 +35,7 @@ class QueryRequest(BaseModel):
 class HybridQueryRequest(BaseModel):
     """混合搜索请求模型"""
     query: str = Field(..., description="查询文本")
-    n_results: int = Field(default=5, ge=1, le=20, description="返回结果数量")
+    n_results: int = Field(default=5, ge=1, le=100, description="返回结果数量")
     include_metadata: bool = Field(default=True, description="是否包含元数据")
     search_mode: str = Field(default="hybrid", description="搜索模式: vector, text, hybrid")
     vector_weight: float = Field(default=0.6, ge=0.0, le=1.0, description="向量搜索权重")

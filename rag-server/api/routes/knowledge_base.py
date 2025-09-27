@@ -248,8 +248,7 @@ async def get_knowledge_point_names():
 async def get_knowledge_points(
     page: int = Query(1, ge=1, description="页码"),
     limit: int = Query(20, ge=1, le=100, description="每页数量"),
-    category: Optional[str] = Query(None, description="分类筛选"),
-    search: Optional[str] = Query(None, description="搜索关键词")
+    category: Optional[str] = Query(None, description="分类筛选")
 ):
     """
     获取知识点列表
@@ -257,63 +256,40 @@ async def get_knowledge_points(
     - **page**: 页码，从1开始
     - **limit**: 每页数量，默认20
     - **category**: 分类筛选
-    - **search**: 搜索关键词
     """
     try:
-        # 构建查询条件        
-        # 查询文档
-        response = await rag_service.query_documents(
-            query=search,
-            n_results=min(limit * 5, 100),  # 获取更多结果用于筛选
-            include_metadata=True
+        # 生成请求ID用于追踪
+        request_id = str(uuid.uuid4())[:8]
+        logger.info(f"[{request_id}] 获取知识点列表 - page: {page}, limit: {limit}, category: {category}")
+        
+        # 使用 Elasticsearch 直接获取分页数据
+        documents, total_count = await rag_service.get_knowledge_points_paginated(
+            page=page,
+            limit=limit,
+            category=category,
+            request_id=request_id
         )
         
-        # 筛选知识点类型的文档
+        # 转换为响应格式
         knowledge_points = []
-        for doc in response.results:
-            if (doc.metadata):
-                
-                # 分类筛选
-                if category and doc.metadata.get("category") != category:
-                    continue
-                
-                # 从metadata中获取结构化数据，反序列化JSON字段
-                try:
-                    examples = json.loads(doc.metadata.get("examples", "[]"))
-                except (json.JSONDecodeError, TypeError):
-                    examples = []
-                
-                try:
-                    tags = json.loads(doc.metadata.get("tags", "[]"))
-                except (json.JSONDecodeError, TypeError):
-                    tags = []
-                
-                knowledge_point = KnowledgePointResponse(
-                    id=doc.id,
-                    title=doc.metadata.get("title"),
-                    description=doc.metadata.get("description"),
-                    category=doc.metadata.get("category"),
-                    examples=examples,
-                    tags=tags,
-                    created_at=doc.metadata.get("created_at"),
-                    updated_at=doc.metadata.get("updated_at")
-                )
-                knowledge_points.append(knowledge_point)
+        for doc in documents:
+            knowledge_point = KnowledgePointResponse(
+                id=doc.get("id"),
+                title=doc.get("title"),
+                description=doc.get("description"),
+                category=doc.get("category"),
+                examples=doc.get("examples", []),
+                tags=doc.get("tags", []),
+                created_at=doc.get("created_at"),
+                updated_at=doc.get("updated_at")
+            )
+            knowledge_points.append(knowledge_point)
         
-        # 按照创建时间从新到旧排序
-        knowledge_points.sort(
-            key=lambda kp: kp.created_at,
-            reverse=True
-        )
-        
-        # 分页处理
-        start = (page - 1) * limit
-        end = start + limit
-        paginated_points = knowledge_points[start:end]
+        logger.info(f"[{request_id}] 成功获取 {len(knowledge_points)} 个知识点，总计 {total_count} 个")
         
         return KnowledgePointsResponse(
-            knowledge_points=paginated_points,
-            total=len(knowledge_points),
+            knowledge_points=knowledge_points,
+            total=total_count,
             page=page,
             limit=limit
         )

@@ -548,6 +548,84 @@ class ElasticsearchService:
             logger.error(f"[{request_id}] Failed to get knowledge point names: {e}")
             return []
 
+    async def get_documents_paginated(
+        self,
+        page: int = 1,
+        limit: int = 20,
+        category: Optional[str] = None,
+        request_id: Optional[str] = None
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """
+        分页获取文档列表
+        
+        Args:
+            page: 页码，从1开始
+            limit: 每页数量
+            category: 分类筛选（可选）
+            request_id: 请求ID用于追踪
+            
+        Returns:
+            (文档列表, 总数量)
+        """
+        if not request_id:
+            request_id = str(uuid.uuid4())[:8]
+            
+        logger.info(f"[{request_id}] Getting paginated documents from Elasticsearch - page: {page}, limit: {limit}, category: {category}")
+        
+        try:
+            es_client = self._get_es_client()
+            
+            # 构建查询条件
+            query = {"match_all": {}}
+            if category:
+                query = {"term": {"category": category}}
+            
+            # 计算偏移量
+            offset = (page - 1) * limit
+            
+            # 构建搜索查询
+            search_body = {
+                "query": query,
+                "size": limit,
+                "from": offset,
+                "_source": {
+                    "excludes": ["content"]  # 排除大字段以提高性能
+                },
+                "sort": [{"created_at": {"order": "desc"}}]  # 按创建时间倒序
+            }
+            
+            # 执行搜索
+            response = await es_client.search(
+                index=self.index,
+                body=search_body
+            )
+            
+            # 解析结果
+            documents = []
+            hits = response.get("hits", {}).get("hits", [])
+            total_count = response.get("hits", {}).get("total", {}).get("value", 0)
+            
+            for hit in hits:
+                source = hit["_source"]
+                document = {
+                    "id": source.get("id"),
+                    "title": source.get("title"),
+                    "description": source.get("description"),
+                    "category": source.get("category"),
+                    "examples": source.get("examples", []),
+                    "tags": source.get("tags", []),
+                    "created_at": source.get("created_at"),
+                    "updated_at": source.get("updated_at")
+                }
+                documents.append(document)
+            
+            logger.info(f"[{request_id}] Found {len(documents)} documents, total: {total_count}")
+            return documents, total_count
+            
+        except Exception as e:
+            logger.error(f"[{request_id}] Failed to get paginated documents: {e}")
+            return [], 0
+
     async def close(self):
         """关闭连接"""
         try:
