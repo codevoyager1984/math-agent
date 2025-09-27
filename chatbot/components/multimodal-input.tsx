@@ -32,11 +32,9 @@ import type { UseChatHelpers } from "@ai-sdk/react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowDown } from "lucide-react";
 import { useScrollToBottom } from "@/hooks/use-scroll-to-bottom";
+import { useChatModel } from "@/hooks/use-chat-model";
 import type { VisibilityType } from "./visibility-selector";
 import type { Attachment, ChatMessage } from "@/lib/types";
-import { DEFAULT_CHAT_MODEL } from "@/lib/ai/models";
-import { saveChatModelAsCookie } from "@/app/(chat)/actions";
-import { startTransition } from "react";
 import { getUploadApiUrl } from "@/lib/rag-config";
 
 function PureMultimodalInput({
@@ -52,7 +50,6 @@ function PureMultimodalInput({
   sendMessage,
   className,
   selectedVisibilityType,
-  selectedModelId,
 }: {
   chatId: string;
   input: string;
@@ -66,11 +63,8 @@ function PureMultimodalInput({
   sendMessage: UseChatHelpers<ChatMessage>["sendMessage"];
   className?: string;
   selectedVisibilityType: VisibilityType;
-  selectedModelId: string;
 }) {
-  const [isDeepThinking, setIsDeepThinking] = useState(
-    selectedModelId === "chat-model-reasoning"
-  );
+  const { isDeepThinking, toggleDeepThinking } = useChatModel();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputContainerRef = useRef<HTMLFormElement>(null);
   const { width } = useWindowSize();
@@ -542,13 +536,7 @@ function PureMultimodalInput({
             />
             <DeepThinkingToggle
               isDeepThinking={isDeepThinking}
-              onToggle={(enabled) => {
-                setIsDeepThinking(enabled);
-                const modelId = enabled ? "chat-model-reasoning" : "chat-model";
-                startTransition(() => {
-                  saveChatModelAsCookie(modelId);
-                });
-              }}
+              onToggle={toggleDeepThinking}
             />
           </PromptInputTools>
           {status !== "ready" ? (
@@ -580,7 +568,6 @@ export const MultimodalInput = memo(
     if (!equal(prevProps.attachments, nextProps.attachments)) return false;
     if (prevProps.selectedVisibilityType !== nextProps.selectedVisibilityType)
       return false;
-    if (prevProps.selectedModelId !== nextProps.selectedModelId) return false;
 
     return true;
   }
