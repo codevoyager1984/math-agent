@@ -198,9 +198,12 @@ export function KnowledgeListPage() {
       setLoading(true);
       setError(null);
 
+      // 如果有标签筛选，需要获取更多数据用于前端筛选
+      const limit = tag ? pageSize * 5 : pageSize;
+      
       const response = await getKnowledgePoints({
         page,
-        limit: pageSize * 3, // 获取更多数据用于前端标签筛选
+        limit,
         search: search || undefined,
         category: category || undefined,
       });
@@ -214,14 +217,22 @@ export function KnowledgeListPage() {
         );
       }
 
-      // 分页处理（前端分页）
-      const startIndex = (page - 1) * pageSize;
-      const endIndex = startIndex + pageSize;
-      const paginatedPoints = filteredPoints.slice(startIndex, endIndex);
-
-      setKnowledgePoints(paginatedPoints);
-      setTotalCount(filteredPoints.length);
-      setTotalPages(Math.ceil(filteredPoints.length / pageSize));
+      // 如果使用了标签筛选，需要重新计算分页
+      if (tag) {
+        // 前端分页处理
+        const startIndex = (page - 1) * pageSize;
+        const endIndex = startIndex + pageSize;
+        const paginatedPoints = filteredPoints.slice(startIndex, endIndex);
+        
+        setKnowledgePoints(paginatedPoints);
+        setTotalCount(filteredPoints.length);
+        setTotalPages(Math.ceil(filteredPoints.length / pageSize));
+      } else {
+        // 后端分页，直接使用返回的数据
+        setKnowledgePoints(filteredPoints);
+        setTotalCount(response.total || filteredPoints.length);
+        setTotalPages(Math.ceil((response.total || filteredPoints.length) / pageSize));
+      }
       
       // 提取分类和标签（仅在首次加载时）
       if (page === 1 && !search && !category && !tag) {
